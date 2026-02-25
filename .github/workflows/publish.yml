@@ -18,6 +18,7 @@ jobs:
       - run: uv run pytest -m "not integration"
 
   release:
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     needs: test
     runs-on: ubuntu-latest
     concurrency: release
@@ -32,10 +33,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
 
       - name: Python Semantic Release
         id: semrel
-        uses: python-semantic-release/python-semantic-release@v9
+        uses: python-semantic-release/python-semantic-release@v9.15.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
