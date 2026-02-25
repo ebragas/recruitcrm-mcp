@@ -33,8 +33,18 @@ uv run <cmd>     # run commands in the venv
 - Keep tools focused — one tool per logical API operation
 - API key via `RECRUIT_CRM_API_KEY` environment variable
 
+### Workflow
+
+1. Create branch from `main` with issue ID (e.g., `MAIN-73/scaffold-mcp`)
+2. Comment on the Linear issue that work is starting
+3. Implement, run `make check` to verify
+4. Check off completed subtasks on the Linear issue description
+5. Use `/commit-commands:commit-push-pr` to commit, push, and open a PR
+6. Transition the Linear issue to "In Review"
+
 ### Linear Integration
 
 - Agent ID: `claude-code-recruitcrm-mcp`
 - Comment on issues when starting and completing work
-- Transition issues through: Todo → In Progress → Awaiting Review → Done
+- Transition issues through: Todo → In Progress → In Review → Done
+- Valid states: Backlog, Todo, In Progress, In Review, Done, Canceled, Duplicate

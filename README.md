@@ -36,6 +36,17 @@ make check           # run lint + tests
 | Tool | Description |
 |------|-------------|
 | `ping` | Health check — verify the server is running and API key is configured |
+| `search_candidates` | Search candidates by query, email, city, or job title |
+| `get_candidate` | Get full profile details for a candidate by slug/ID |
+| `list_jobs` | List job requisitions, optionally filtered by status |
+| `get_job` | Get full details for a job by slug/ID |
+
+## Resources
+
+| Resource | Description |
+|----------|-------------|
+| `recruitcrm://candidate/{id}/resume` | Get resume URL for a candidate |
+| `recruitcrm://job/{id}/description` | Get full job description |
 
 ## Configuration
 
