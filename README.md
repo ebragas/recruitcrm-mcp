@@ -1,7 +1,6 @@
 # Recruit CRM MCP
 
 [![CI](https://github.com/ebragas/recruitcrm-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ebragas/recruitcrm-mcp/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/ebragas/recruitcrm-mcp/graph/badge.svg)](https://codecov.io/gh/ebragas/recruitcrm-mcp)
 
 MCP (Model Context Protocol) server for [Recruit CRM](https://www.recruitcrm.io/), enabling AI assistants to search candidates, view jobs, and manage recruiting workflows.
 
