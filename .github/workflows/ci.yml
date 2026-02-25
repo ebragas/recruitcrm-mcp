@@ -37,24 +37,8 @@ jobs:
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing
 
-      - name: Upload coverage artifact
-        if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.xml
-
       - name: Coverage PR comment
         if: matrix.python-version == '3.12' && github.event_name == 'pull_request'
         uses: MishaKav/pytest-coverage-comment@main
         with:
           pytest-xml-coverage-path: coverage.xml
-
-      - name: Upload to Codecov
-        if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v5
-        with:
-          files: coverage.xml
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
