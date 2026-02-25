@@ -42,6 +42,11 @@ jobs:
         uses: python-semantic-release/python-semantic-release@v9.15.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          build: "false"
+
+      - name: Build package
+        if: steps.semrel.outputs.released == 'true'
+        run: uv build
 
       - name: Publish to PyPI
         if: steps.semrel.outputs.released == 'true'
