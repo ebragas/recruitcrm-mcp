@@ -1,4 +1,7 @@
-.PHONY: venv clean test coverage integration-test lint check
+.PHONY: setup venv clean test coverage integration-test lint check
+
+setup: venv
+	git config core.hooksPath .githooks
 
 venv:
 	uv sync

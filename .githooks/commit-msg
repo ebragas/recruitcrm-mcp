@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Validate that commit messages follow the Conventional Commits format.
+# https://www.conventionalcommits.org/
+#
+# Valid prefixes: feat, fix, chore, docs, style, refactor, perf, test, ci, build, revert
+# Examples:
+#   feat: add candidate search tool
+#   fix(client): handle empty API response
+#   chore(release): 0.2.0
+#   docs: update README with install instructions
+
+commit_msg_file="$1"
+commit_msg=$(head -1 "$commit_msg_file")
+
+# Allow merge commits
+if echo "$commit_msg" | grep -qE '^Merge '; then
+    exit 0
+fi
+
+# Conventional commit pattern: type(optional scope): description
+pattern='^(feat|fix|chore|docs|style|refactor|perf|test|ci|build|revert)(\(.+\))?!?: .+'
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+    echo ""
+    echo "ERROR: Commit message does not follow Conventional Commits format."
+    echo ""
+    echo "  Expected: <type>[optional scope]: <description>"
+    echo ""
+    echo "  Types: feat, fix, chore, docs, style, refactor, perf, test, ci, build, revert"
+    echo ""
+    echo "  Examples:"
+    echo "    feat: add candidate search tool"
+    echo "    fix(client): handle empty API response"
+    echo "    chore: update dependencies"
+    echo ""
+    echo "  Your message: $commit_msg"
+    echo ""
+    exit 1
+fi
