@@ -48,9 +48,10 @@ uv run <cmd>     # run commands in the venv
 
 ### Git Branching
 
-- Branch from `main`
+- Branch from `main` or parent feature branch for sequential work
 - Branch naming: `<issue-id>/<short-description>` (e.g., `MAIN-73/scaffold-mcp`)
 - Linear auto-tracks branches with issue IDs in the name
+- When branching off a feature branch, set that branch as the PR base (`gh pr create --base <parent-branch>`) so the diff only shows the new work
 
 ### Code Style
 
