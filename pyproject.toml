@@ -22,6 +22,10 @@ packages = ["src/recruit_crm_mcp"]
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "pytest-dotenv>=0.5.2",
+    "anyio[trio]>=4.0",
+    "pytest-anyio>=0.0.0",
     "ruff>=0.9.0",
 ]
 
@@ -30,3 +34,4 @@ src = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["integration: tests that hit the live Recruit CRM API"]

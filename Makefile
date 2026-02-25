@@ -1,4 +1,4 @@
-.PHONY: venv clean test lint check
+.PHONY: venv clean test coverage integration-test lint check
 
 venv:
 	uv sync
@@ -10,7 +10,13 @@ clean:
 	find . -type f -name '*.pyc' -delete
 
 test:
-	uv run pytest
+	uv run pytest -m "not integration"
+
+coverage:
+	uv run pytest -m "not integration" --cov=recruit_crm_mcp --cov-report=term-missing --cov-report=xml:coverage.xml
+
+integration-test:
+	uv run pytest -m integration --tb=short
 
 lint:
 	uv run ruff check src/ tests/
