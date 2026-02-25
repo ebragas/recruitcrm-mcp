@@ -1,4 +1,4 @@
-.PHONY: venv clean test integration-test lint check
+.PHONY: venv clean test coverage integration-test lint check
 
 venv:
 	uv sync
@@ -11,6 +11,9 @@ clean:
 
 test:
 	uv run pytest -m "not integration"
+
+coverage:
+	uv run pytest -m "not integration" --cov=recruit_crm_mcp --cov-report=term-missing --cov-report=xml:coverage.xml
 
 integration-test:
 	uv run pytest -m integration --tb=short
