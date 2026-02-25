@@ -72,8 +72,13 @@ async def candidate_resume(candidate_id: str) -> str:
     """Get resume URL or text for a candidate."""
     data = await client.get_candidate(candidate_id)
     resume = data.get("resume")
-    if isinstance(resume, dict) and resume.get("file_link"):
-        return f"Resume: {resume['filename']}\nURL: {resume['file_link']}"
+    if isinstance(resume, dict):
+        file_link = resume.get("file_link")
+        if file_link:
+            filename = resume.get("filename") or ""
+            if filename:
+                return f"Resume: {filename}\nURL: {file_link}"
+            return f"Resume URL: {file_link}"
     return "No resume available for this candidate."
 
 

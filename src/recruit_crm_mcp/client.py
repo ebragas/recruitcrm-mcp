@@ -7,6 +7,8 @@ import httpx
 
 API_BASE = "https://api.recruitcrm.io/v1"
 
+_client: httpx.AsyncClient | None = None
+
 
 def _get_api_key() -> str:
     key = os.environ.get("RECRUIT_CRM_API_KEY")
@@ -22,17 +24,33 @@ def _headers() -> dict[str, str]:
     }
 
 
-async def get(path: str, params: dict[str, Any] | None = None) -> dict:
+async def _get_client() -> httpx.AsyncClient:
+    """Get a shared AsyncClient instance for connection pooling."""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient()
+    return _client
+
+
+async def aclose_client() -> None:
+    """Close the shared AsyncClient. Call on application shutdown."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
+async def get(path: str, params: dict[str, Any] | None = None) -> Any:
     """Make a GET request to the Recruit CRM API."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{API_BASE}{path}",
-            headers=_headers(),
-            params=params,
-            timeout=30.0,
-        )
-        resp.raise_for_status()
-        return resp.json()
+    client = await _get_client()
+    resp = await client.get(
+        f"{API_BASE}{path}",
+        headers=_headers(),
+        params=params,
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def search_candidates(
@@ -60,10 +78,14 @@ async def search_candidates(
 
     # API returns paginated response with "data" key
     if isinstance(data, dict) and "data" in data:
-        return data["data"]
-    if isinstance(data, list):
-        return data
-    return [data] if data else []
+        results = data["data"]
+    elif isinstance(data, list):
+        results = data
+    else:
+        results = [data] if data else []
+
+    # API ignores per_page below its minimum (100), so enforce limit client-side
+    return results[:limit]
 
 
 async def get_candidate(candidate_slug: str) -> dict:
@@ -77,11 +99,16 @@ async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
     if status:
         params["status"] = status
     data = await get("/jobs", params)
+
     if isinstance(data, dict) and "data" in data:
-        return data["data"]
-    if isinstance(data, list):
-        return data
-    return [data] if data else []
+        results = data["data"]
+    elif isinstance(data, list):
+        results = data
+    else:
+        results = [data] if data else []
+
+    # API ignores per_page below its minimum (15), so enforce limit client-side
+    return results[:limit]
 
 
 async def get_job(job_slug: str) -> dict:
