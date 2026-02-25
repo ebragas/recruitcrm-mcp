@@ -47,3 +47,11 @@ src = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["integration: tests that hit the live Recruit CRM API"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_message = "chore(release): {version}"
+build_command = "uv build"
+changelog_file = "CHANGELOG.md"
+upload_to_vcs_release = true
