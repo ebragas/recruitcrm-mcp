@@ -51,24 +51,20 @@ def prompt_install_uv() -> None:
     print()
     system = platform.system()
     if system == "Darwin":
-        print("   Install with Homebrew:")
-        print("     brew install uv")
-        print()
-        print("   Or via the official installer:")
+        print("   To install manually, open Terminal and run:")
         print("     curl -LsSf https://astral.sh/uv/install.sh | sh")
     elif system == "Windows":
-        print("   Install via the official installer:")
+        print("   To install manually, open PowerShell and run:")
         print("     powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"")
     print()
 
-    answer = input("Would you like to attempt automatic installation? [y/N] ").strip()
-    if answer.lower() in ("y", "yes"):
-        _auto_install_uv(system)
-    else:
+    answer = input("Would you like to install it now? [Y/n] ").strip()
+    if answer.lower() in ("n", "no"):
         raise SystemExit(
             "Please install uv (https://docs.astral.sh/uv/getting-started/installation/) "
             "and re-run this installer."
         )
+    _auto_install_uv(system)
 
 
 def _auto_install_uv(system: str) -> None:
