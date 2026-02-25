@@ -6,9 +6,23 @@ MCP (Model Context Protocol) server for [Recruit CRM](https://www.recruitcrm.io/
 
 ## Quick Start
 
-### With Claude Desktop (zero-touch via uvx)
+### One-Click Install (recommended)
 
-Add to your `claude_desktop_config.json`:
+Run the interactive installer — it configures Claude Desktop automatically:
+
+```bash
+uvx --from recruit-crm-mcp recruit-crm-mcp-install
+```
+
+The installer will:
+- Check that `uv` is installed (and help you install it if not)
+- Prompt for your Recruit CRM API key
+- Back up your existing Claude Desktop config
+- Add the Recruit CRM MCP server entry
+
+### Manual Setup
+
+If you prefer to configure manually, add to your `claude_desktop_config.json`:
 
 ```json
 {
