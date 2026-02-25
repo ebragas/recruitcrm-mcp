@@ -1,17 +1,14 @@
 import os
+from importlib.metadata import version, PackageNotFoundError
 
 from fastmcp import FastMCP
 
+try:
+    __version__ = version("recruit-crm-mcp")
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"
+
 mcp = FastMCP("Recruit CRM")
-
-API_BASE = "https://api.recruitcrm.io/v1"
-
-
-def _get_api_key() -> str:
-    key = os.environ.get("RECRUIT_CRM_API_KEY")
-    if not key:
-        raise RuntimeError("RECRUIT_CRM_API_KEY environment variable is required")
-    return key
 
 
 @mcp.tool()
@@ -20,7 +17,7 @@ def ping() -> dict:
     has_key = bool(os.environ.get("RECRUIT_CRM_API_KEY"))
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": __version__,
         "api_configured": has_key,
     }
 

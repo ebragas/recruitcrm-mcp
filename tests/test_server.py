@@ -1,10 +1,10 @@
-from recruit_crm_mcp.server import ping
+from recruit_crm_mcp.server import ping, __version__
 
 
 def test_ping_returns_ok():
     result = ping()
     assert result["status"] == "ok"
-    assert result["version"] == "0.1.0"
+    assert result["version"] == __version__
 
 
 def test_ping_reports_no_api_key(monkeypatch):
