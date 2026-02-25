@@ -5,8 +5,8 @@ venv:
 
 clean:
 	rm -rf .venv
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type d -name '*.egg-info' -exec rm -rf {} +
+	find . -type d -name '__pycache__' -prune -exec rm -rf '{}' +
+	find . -type d -name '*.egg-info' -prune -exec rm -rf '{}' +
 	find . -type f -name '*.pyc' -delete
 
 test:
