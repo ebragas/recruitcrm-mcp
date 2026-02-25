@@ -71,9 +71,9 @@ async def get_job(job_id: str) -> dict:
 async def candidate_resume(candidate_id: str) -> str:
     """Get resume URL or text for a candidate."""
     data = await client.get_candidate(candidate_id)
-    resume_url = data.get("resume") or data.get("resume_url")
-    if resume_url:
-        return f"Resume URL: {resume_url}"
+    resume = data.get("resume")
+    if isinstance(resume, dict) and resume.get("file_link"):
+        return f"Resume: {resume['filename']}\nURL: {resume['file_link']}"
     return "No resume available for this candidate."
 
 
@@ -81,29 +81,31 @@ async def candidate_resume(candidate_id: str) -> str:
 async def job_description(job_id: str) -> str:
     """Get the full description for a job."""
     data = await client.get_job(job_id)
-    description = data.get("description") or data.get("job_description") or ""
-    title = data.get("name") or data.get("title") or "Unknown"
+    description = data.get("job_description_text") or ""
+    title = data.get("name") or "Unknown"
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
 
 
 def _summarize_candidate(c: dict) -> dict:
     """Extract key fields from a candidate record for concise display."""
     return {
-        "id": c.get("id") or c.get("slug"),
+        "slug": c.get("slug"),
         "name": f"{c.get('first_name', '')} {c.get('last_name', '')}".strip(),
         "email": c.get("email"),
-        "job_title": c.get("job_title") or c.get("position"),
-        "company": c.get("company_name") or c.get("company"),
+        "position": c.get("position"),
+        "company": c.get("current_organization"),
         "city": c.get("city"),
     }
 
 
 def _summarize_job(j: dict) -> dict:
     """Extract key fields from a job record for concise display."""
+    job_status = j.get("job_status")
+    status_label = job_status.get("label") if isinstance(job_status, dict) else None
     return {
-        "id": j.get("id") or j.get("slug"),
-        "name": j.get("name") or j.get("title"),
-        "status": j.get("status"),
+        "slug": j.get("slug"),
+        "name": j.get("name"),
+        "status": status_label,
         "city": j.get("city"),
         "country": j.get("country"),
     }
