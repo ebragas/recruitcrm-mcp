@@ -90,11 +90,12 @@ def _auto_install_uv(system: str) -> None:
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         raise SystemExit(f"Automatic installation failed: {exc}") from exc
 
-    # Verify it worked
+    # The installer may have modified shell profile files that won't be
+    # reloaded in the current process, so uvx may not be on PATH yet.
     if not check_uvx():
         raise SystemExit(
-            "uv was installed but 'uvx' is still not on PATH.\n"
-            "You may need to restart your terminal, then re-run this installer."
+            "uv installation completed, but 'uvx' is not yet on your PATH.\n"
+            "Please restart your terminal (or open a new one) and re-run this installer."
         )
     print("✓ uv installed successfully.\n")
 
@@ -113,8 +114,15 @@ def load_config(config_path: Path) -> dict:
     """Load existing config or return empty structure."""
     if not config_path.exists():
         return {}
-    with open(config_path) as f:
-        return json.load(f)
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        raise SystemExit(
+            f"Error: {config_path} contains invalid JSON.\n"
+            "Please fix the file manually or restore from a backup "
+            "(look for .backup-*.json files in the same directory)."
+        )
 
 
 def inject_server(config: dict, api_key: str) -> dict:
@@ -130,52 +138,61 @@ def inject_server(config: dict, api_key: str) -> dict:
 def write_config(config_path: Path, config: dict) -> None:
     """Write config JSON to disk, creating parent directories if needed."""
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
         f.write("\n")
+    # Restrict permissions so only the owner can read the API key (no-op on Windows).
+    try:
+        config_path.chmod(0o600)
+    except OSError:
+        pass
 
 
 def main() -> None:
-    print("=" * 56)
-    print("  Recruit CRM MCP — Claude Desktop Installer")
-    print("=" * 56)
-    print()
+    try:
+        print("=" * 56)
+        print("  Recruit CRM MCP — Claude Desktop Installer")
+        print("=" * 56)
+        print()
 
-    # 1. Pre-requisite check
-    if not check_uvx():
-        prompt_install_uv()
+        # 1. Pre-requisite check
+        if not check_uvx():
+            prompt_install_uv()
 
-    # 2. Detect config path
-    config_path = get_config_path()
-    print(f"Claude Desktop config: {config_path}")
+        # 2. Detect config path
+        config_path = get_config_path()
+        print(f"Claude Desktop config: {config_path}")
 
-    if config_path.exists():
-        print("  ✓ Config file found.")
-    else:
-        print("  • Config file does not exist yet — it will be created.")
-    print()
+        if config_path.exists():
+            print("  ✓ Config file found.")
+        else:
+            print("  • Config file does not exist yet — it will be created.")
+        print()
 
-    # 3. Prompt for API key
-    api_key = ""
-    while not api_key.strip():
-        api_key = getpass("Enter your Recruit CRM API key: ")
-        if not api_key.strip():
-            print("  API key cannot be empty. Please try again.")
-    print()
+        # 3. Prompt for API key
+        api_key = ""
+        while not api_key.strip():
+            api_key = getpass("Enter your Recruit CRM API key: ")
+            if not api_key.strip():
+                print("  API key cannot be empty. Please try again.")
+        print()
 
-    # 4. Backup existing config
-    backup_path = backup_config(config_path)
-    if backup_path:
-        print(f"  ✓ Backed up existing config to:\n    {backup_path}")
+        # 4. Backup existing config
+        backup_path = backup_config(config_path)
+        if backup_path:
+            print(f"  ✓ Backed up existing config to:\n    {backup_path}")
 
-    # 5. Load, inject, write
-    config = load_config(config_path)
-    config = inject_server(config, api_key.strip())
-    write_config(config_path, config)
+        # 5. Load, inject, write
+        config = load_config(config_path)
+        config = inject_server(config, api_key.strip())
+        write_config(config_path, config)
 
-    print(f"  ✓ Wrote updated config to:\n    {config_path}")
-    print()
-    print("Done! Restart Claude Desktop to start using the Recruit CRM MCP server.")
+        print(f"  ✓ Wrote updated config to:\n    {config_path}")
+        print()
+        print("Done! Restart Claude Desktop to start using the Recruit CRM MCP server.")
+    except KeyboardInterrupt:
+        print("\n\nInstallation cancelled.")
+        return
 
 
 if __name__ == "__main__":
