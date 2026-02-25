@@ -3,11 +3,6 @@ import pytest
 from recruit_crm_mcp import client
 
 
-@pytest.fixture(autouse=True)
-def set_api_key(monkeypatch):
-    monkeypatch.setenv("RECRUIT_CRM_API_KEY", "test-key-123")
-
-
 class TestHeaders:
     def test_includes_bearer_token(self):
         headers = client._headers()
