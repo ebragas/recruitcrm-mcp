@@ -1,6 +1,7 @@
 """Recruit CRM MCP server."""
 
 import os
+from contextlib import asynccontextmanager
 from importlib.metadata import version, PackageNotFoundError
 
 from fastmcp import FastMCP
@@ -12,7 +13,14 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0-dev"
 
-mcp = FastMCP("Recruit CRM")
+
+@asynccontextmanager
+async def _lifespan(server: FastMCP):
+    yield
+    await client.aclose_client()
+
+
+mcp = FastMCP("Recruit CRM", lifespan=_lifespan)
 
 
 @mcp.tool()
@@ -37,6 +45,8 @@ async def search_candidates(
     """Search for candidates by free-text query, email, city, or job title.
 
     Use `query` for general search, or filter by specific fields.
+    `query` and field filters are mutually exclusive — when any field filter
+    is provided, `query` is ignored.
     Returns a list of matching candidate summaries.
     """
     results = await client.search_candidates(

@@ -50,6 +50,7 @@ class TestSummarizeCandidate:
         assert result["email"] is None
         assert result["position"] is None
         assert result["company"] is None
+        assert result["city"] is None
 
 
 class TestSummarizeJob:
@@ -74,3 +75,5 @@ class TestSummarizeJob:
         assert result["slug"] == "abc"
         assert result["name"] == "Designer"
         assert result["status"] is None
+        assert result["city"] is None
+        assert result["country"] is None

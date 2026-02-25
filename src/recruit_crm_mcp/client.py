@@ -60,7 +60,13 @@ async def search_candidates(
     job_title: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
-    """Search for candidates using available filters."""
+    """Search for candidates using available filters.
+
+    Note: ``query`` (free-text search) and field filters (email, city,
+    job_title) are mutually exclusive.  When any field filter is provided,
+    ``query`` is ignored and the list endpoint with field filters is used
+    instead of the search endpoint.
+    """
     params: dict[str, Any] = {"per_page": limit}
     if email:
         params["email"] = email
