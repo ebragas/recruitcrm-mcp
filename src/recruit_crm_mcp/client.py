@@ -141,12 +141,26 @@ async def get_candidate(candidate_slug: str) -> dict:
     return await get(f"/candidates/{candidate_slug}")
 
 
-async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
-    """List jobs, optionally filtered by status."""
-    params: dict[str, Any] = {"per_page": limit}
-    if status:
-        params["status"] = status
-    data = await get("/jobs", params)
+# Maps user-facing status labels → API integer IDs for /jobs/search.
+# Note: "Closed" has ID 0, which the API treats as no filter (returns []).
+# Closed jobs cannot be filtered via /jobs/search.
+JOB_STATUS_IDS: dict[str, int] = {
+    "open": 1,
+    "on hold": 2,
+    "canceled": 3,
+    "closed": 0,
+    "placed": 1004,
+    "refill": 1406,
+}
+
+
+async def list_jobs(limit: int = 20) -> list[dict]:
+    """List jobs via the /jobs endpoint (no filtering).
+
+    The API always returns at least 15 per page; ``limit`` is enforced
+    client-side.
+    """
+    data = await get("/jobs", {"per_page": limit})
 
     if isinstance(data, dict) and "data" in data:
         results = data["data"]
@@ -155,7 +169,52 @@ async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
     else:
         results = [data] if data else []
 
-    # API ignores per_page below its minimum (15), so enforce limit client-side
+    return results[:limit]
+
+
+async def search_jobs(
+    status: str | None = None,
+    name: str | None = None,
+    city: str | None = None,
+    country: str | None = None,
+    company_name: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Search for jobs via the /jobs/search endpoint.
+
+    At least one filter must be provided — the API returns an empty list
+    when called with no filters.
+
+    ``status`` accepts a label string (e.g. 'Open', 'Closed') which is
+    mapped to the integer ID the API expects.
+    """
+    params: dict[str, Any] = {}
+    if status:
+        status_id = JOB_STATUS_IDS.get(status.lower())
+        if status_id is None:
+            valid = ", ".join(sorted(JOB_STATUS_IDS.keys(), key=lambda k: JOB_STATUS_IDS[k]))
+            raise ValueError(
+                f"Unknown job status {status!r}. Valid values: {valid}"
+            )
+        params["job_status"] = status_id
+    if name:
+        params["name"] = name
+    if city:
+        params["city"] = city
+    if country:
+        params["country"] = country
+    if company_name:
+        params["company_name"] = company_name
+
+    data = await get("/jobs/search", params)
+
+    if isinstance(data, dict) and "data" in data:
+        results = data["data"]
+    elif isinstance(data, list):
+        results = data
+    else:
+        results = [data] if data else []
+
     return results[:limit]
 
 

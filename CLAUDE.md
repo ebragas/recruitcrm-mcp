@@ -58,6 +58,7 @@ uv run <cmd>     # run commands in the venv
 - Source layout: `src/recruit_crm_mcp/`
 - Keep tools focused — one tool per logical API operation
 - API key via `RECRUIT_CRM_API_KEY` environment variable
+- **No backward compatibility shims.** This is an MCP server, not a library — there are no external callers. When signatures change, update all internal call sites and delete the old code. Don't add deprecation wrappers or keep dead parameters around.
 
 ### Workflow
 

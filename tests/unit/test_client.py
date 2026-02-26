@@ -93,9 +93,10 @@ class TestGetCandidate:
 
 class TestListJobs:
     @pytest.mark.anyio
-    async def test_list_all(self, monkeypatch):
+    async def test_uses_list_endpoint(self, monkeypatch):
         async def mock_get(path, params=None):
             assert path == "/jobs"
+            assert "per_page" in params
             return {"data": [{"name": "Engineer"}, {"name": "Designer"}]}
 
         monkeypatch.setattr(client, "get", mock_get)
@@ -103,14 +104,91 @@ class TestListJobs:
         assert len(results) == 2
 
     @pytest.mark.anyio
-    async def test_filter_by_status(self, monkeypatch):
+    async def test_enforces_limit_client_side(self, monkeypatch):
         async def mock_get(path, params=None):
-            assert params["status"] == "Open"
-            return {"data": [{"name": "Engineer", "status": "Open"}]}
+            return {"data": [{"id": i} for i in range(100)]}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.list_jobs(status="Open")
+        results = await client.list_jobs(limit=3)
+        assert len(results) == 3
+
+
+class TestSearchJobs:
+    @pytest.mark.anyio
+    async def test_uses_search_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(name="Engineer")
         assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_maps_status_label_to_id(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["job_status"] == 1  # "Open" → 1
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(status="Open")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_status_case_insensitive(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert params["job_status"] == 0  # "closed" → 0
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        await client.search_jobs(status="closed")
+
+    @pytest.mark.anyio
+    async def test_invalid_status_raises(self):
+        with pytest.raises(ValueError, match="Unknown job status"):
+            await client.search_jobs(status="InvalidStatus")
+
+    @pytest.mark.anyio
+    async def test_passes_all_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["job_status"] == 1
+            assert params["name"] == "Engineer"
+            assert params["city"] == "Austin"
+            assert params["country"] == "US"
+            assert params["company_name"] == "Acme"
+            # Search endpoint does not accept per_page
+            assert "per_page" not in params
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(
+            status="Open", name="Engineer", city="Austin",
+            country="US", company_name="Acme",
+        )
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_omits_none_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert "job_status" not in params
+            assert "name" not in params
+            assert "per_page" not in params
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs()
+        assert results == []
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_client_side(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"id": i} for i in range(100)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(name="x", limit=5)
+        assert len(results) == 5
 
 
 class TestGetJob:

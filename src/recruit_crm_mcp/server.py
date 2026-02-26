@@ -62,12 +62,39 @@ async def get_candidate(candidate_id: str) -> dict:
 
 
 @mcp.tool()
-async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
-    """List job requisitions, optionally filtered by status (e.g. 'Open', 'Closed').
+async def list_jobs(limit: int = 20) -> list[dict]:
+    """List job requisitions without any filters.
 
-    Returns a list of job summaries.
+    Returns jobs in reverse chronological order.
+    Use search_jobs instead when you need to filter by status or other fields.
     """
-    results = await client.list_jobs(status=status, limit=limit)
+    results = await client.list_jobs(limit=limit)
+    return [_summarize_job(j) for j in results]
+
+
+@mcp.tool()
+async def search_jobs(
+    status: str | None = None,
+    name: str | None = None,
+    city: str | None = None,
+    country: str | None = None,
+    company_name: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Search for jobs by status, name, city, country, or company.
+
+    At least one filter must be provided. Filters are combined with AND logic.
+    Status accepts a label: 'Open', 'On Hold', 'Closed', 'Placed', 'Canceled', 'Refill'.
+    Returns a list of matching job summaries.
+    """
+    results = await client.search_jobs(
+        status=status,
+        name=name,
+        city=city,
+        country=country,
+        company_name=company_name,
+        limit=limit,
+    )
     return [_summarize_job(j) for j in results]
 
 
