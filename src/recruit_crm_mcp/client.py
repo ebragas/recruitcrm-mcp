@@ -95,7 +95,16 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
     return resp.json()
 
 
-async def search_candidates(
+def _extract_results(data: Any) -> list[dict]:
+    """Normalize API response into a plain list of records."""
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    if isinstance(data, list):
+        return data
+    return [data] if data else []
+
+
+async def find_candidates(
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
@@ -103,13 +112,13 @@ async def search_candidates(
     state: str | None = None,
     limit: int = 25,
 ) -> list[dict]:
-    """Search for candidates via the /candidates/search endpoint.
+    """Find candidates — searches when filters are provided, lists otherwise.
 
-    Filters are optional; if none are provided, the API returns an empty
-    list.  All provided filters use like-matching by default.
+    With filters: calls ``/candidates/search`` (LIKE-style partial matching,
+    AND logic).  Without filters: calls ``/candidates`` to browse.
 
-    Note: the search endpoint does not accept ``per_page``; it always
-    returns 100 results per page.  We enforce ``limit`` client-side.
+    Both endpoints return 100 results per page minimum; ``limit`` is
+    enforced client-side.
     """
     params: dict[str, Any] = {}
     if first_name:
@@ -123,37 +132,12 @@ async def search_candidates(
     if state:
         params["state"] = state
 
-    data = await get("/candidates/search", params)
-
-    # API returns paginated response with "data" key, or [] when no filters
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
+    if params:
+        data = await get("/candidates/search", params)
     else:
-        results = [data] if data else []
+        data = await get("/candidates", {"per_page": limit})
 
-    # Search endpoint always returns 100/page, so enforce limit client-side
-    return results[:limit]
-
-
-async def list_candidates(limit: int = 25) -> list[dict]:
-    """List candidates via the /candidates endpoint (no filtering).
-
-    Use this when you need to browse candidates without specific filters.
-    The API always returns at least 100 per page; ``limit`` is enforced
-    client-side.
-    """
-    data = await get("/candidates", {"per_page": limit})
-
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_candidate(candidate_slug: str) -> dict:
@@ -168,15 +152,8 @@ async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
         params["status"] = status
     data = await get("/jobs", params)
 
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
     # API ignores per_page below its minimum (15), so enforce limit client-side
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_job(job_slug: str) -> dict:

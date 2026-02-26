@@ -35,7 +35,7 @@ def ping() -> dict:
 
 
 @mcp.tool()
-async def search_candidates(
+async def find_candidates(
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
@@ -43,12 +43,12 @@ async def search_candidates(
     state: str | None = None,
     limit: int = 25,
 ) -> list[dict]:
-    """Search for candidates by name, email, country, or state.
+    """Find candidates — searches with filters or lists all without.
 
-    Filters are optional, combined with AND logic, and use partial (LIKE-style)
-    matching by default. Returns an empty list when no filters are provided.
+    When one or more filters are provided, searches using partial (LIKE-style)
+    matching with AND logic. When no filters are provided, lists candidates.
     """
-    results = await client.search_candidates(
+    results = await client.find_candidates(
         first_name=first_name,
         last_name=last_name,
         email=email,
@@ -56,17 +56,6 @@ async def search_candidates(
         state=state,
         limit=limit,
     )
-    return [_summarize_candidate(c) for c in results]
-
-
-@mcp.tool()
-async def list_candidates(limit: int = 25) -> list[dict]:
-    """List candidates without any filters.
-
-    Returns up to ``limit`` candidates in the order provided by the API.
-    Use search_candidates instead when you need to filter by specific fields.
-    """
-    results = await client.list_candidates(limit=limit)
     return [_summarize_candidate(c) for c in results]
 
 

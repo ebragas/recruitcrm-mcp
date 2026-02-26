@@ -36,15 +36,26 @@ class TestGetApiKey:
             client._get_api_key()
 
 
-class TestSearchCandidates:
+class TestFindCandidates:
     @pytest.mark.anyio
-    async def test_always_uses_search_endpoint(self, monkeypatch):
+    async def test_with_filters_uses_search_endpoint(self, monkeypatch):
         async def mock_get(path, params=None):
             assert path == "/candidates/search"
             return {"data": [{"first_name": "Jane", "last_name": "Doe"}]}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates()
+        results = await client.find_candidates(first_name="Jane")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_without_filters_uses_list_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/candidates"
+            assert "per_page" in params
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.find_candidates()
         assert len(results) == 1
 
     @pytest.mark.anyio
@@ -56,7 +67,7 @@ class TestSearchCandidates:
             return {"data": [{"first_name": "Jane", "last_name": "Doe"}]}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(first_name="Jane", last_name="Doe")
+        results = await client.find_candidates(first_name="Jane", last_name="Doe")
         assert len(results) == 1
 
     @pytest.mark.anyio
@@ -67,7 +78,7 @@ class TestSearchCandidates:
             return {"data": [{"email": "jane@example.com"}]}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(email="jane@example.com")
+        results = await client.find_candidates(email="jane@example.com")
         assert len(results) == 1
 
     @pytest.mark.anyio
@@ -79,30 +90,26 @@ class TestSearchCandidates:
             return {"data": [{"first_name": "Jane"}]}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(country="US", state="California")
+        results = await client.find_candidates(country="US", state="California")
         assert len(results) == 1
 
     @pytest.mark.anyio
-    async def test_omits_none_filters(self, monkeypatch):
-        async def mock_get(path, params=None):
-            assert "first_name" not in params
-            assert "email" not in params
-            # Search endpoint does not accept per_page
-            assert "per_page" not in params
-            return {"data": []}
-
-        monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates()
-        assert results == []
-
-    @pytest.mark.anyio
-    async def test_enforces_limit_client_side(self, monkeypatch):
+    async def test_enforces_limit_with_filters(self, monkeypatch):
         async def mock_get(path, params=None):
             return {"data": [{"id": i} for i in range(100)]}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(limit=5)
+        results = await client.find_candidates(first_name="Jane", limit=5)
         assert len(results) == 5
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_without_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"id": i} for i in range(100)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.find_candidates(limit=3)
+        assert len(results) == 3
 
     @pytest.mark.anyio
     async def test_handles_list_response(self, monkeypatch):
@@ -110,7 +117,7 @@ class TestSearchCandidates:
             return [{"first_name": "Jane"}]
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(first_name="Jane")
+        results = await client.find_candidates(first_name="Jane")
         assert len(results) == 1
 
     @pytest.mark.anyio
@@ -119,30 +126,8 @@ class TestSearchCandidates:
             return {"data": []}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(first_name="nobody")
+        results = await client.find_candidates(first_name="nobody")
         assert results == []
-
-
-class TestListCandidates:
-    @pytest.mark.anyio
-    async def test_uses_list_endpoint(self, monkeypatch):
-        async def mock_get(path, params=None):
-            assert path == "/candidates"
-            assert "per_page" in params
-            return {"data": [{"first_name": "Jane"}]}
-
-        monkeypatch.setattr(client, "get", mock_get)
-        results = await client.list_candidates(limit=5)
-        assert len(results) == 1
-
-    @pytest.mark.anyio
-    async def test_enforces_limit_client_side(self, monkeypatch):
-        async def mock_get(path, params=None):
-            return {"data": [{"id": i} for i in range(100)]}
-
-        monkeypatch.setattr(client, "get", mock_get)
-        results = await client.list_candidates(limit=3)
-        assert len(results) == 3
 
 
 class TestGetCandidate:

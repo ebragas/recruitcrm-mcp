@@ -21,13 +21,13 @@ pytestmark = [
 ]
 
 
-class TestListCandidates:
+class TestFindCandidates:
     async def test_list_returns_results(self):
-        results = await client.list_candidates(limit=3)
+        results = await client.find_candidates(limit=3)
         assert len(results) > 0
 
     async def test_list_results_have_expected_fields(self):
-        results = await client.list_candidates(limit=1)
+        results = await client.find_candidates(limit=1)
         candidate = results[0]
         assert "slug" in candidate
         assert "first_name" in candidate
@@ -36,24 +36,24 @@ class TestListCandidates:
         assert "current_organization" in candidate
 
     async def test_list_enforces_limit(self):
-        results = await client.list_candidates(limit=3)
+        results = await client.find_candidates(limit=3)
         assert len(results) <= 3
 
     async def test_summarize_candidate_from_live_data(self):
-        results = await client.list_candidates(limit=1)
+        results = await client.find_candidates(limit=1)
         summary = _summarize_candidate(results[0])
         assert summary["slug"] is not None
         assert summary["name"]  # non-empty
 
     async def test_get_candidate_by_slug(self):
-        results = await client.list_candidates(limit=1)
+        results = await client.find_candidates(limit=1)
         slug = results[0]["slug"]
         candidate = await client.get_candidate(slug)
         assert candidate["slug"] == slug
         assert "first_name" in candidate
 
     async def test_candidate_resume_field_structure(self):
-        results = await client.list_candidates(limit=5)
+        results = await client.find_candidates(limit=5)
         # Find a candidate with a resume
         for r in results:
             candidate = await client.get_candidate(r["slug"])
@@ -65,19 +65,15 @@ class TestListCandidates:
                 return
         pytest.skip("No candidates with resumes found in first 5 results")
 
-
-class TestSearchCandidates:
-    """Regression tests for MAIN-85: search filters were silently ignored."""
-
     async def test_search_with_first_name_returns_matches(self):
-        # Get a known first name from the list endpoint
-        baseline = await client.list_candidates(limit=1)
+        """Regression for MAIN-85: search filters were silently ignored."""
+        baseline = await client.find_candidates(limit=1)
         assert len(baseline) > 0
         target_name = baseline[0].get("first_name")
         if not target_name:
             pytest.skip("First candidate has no first_name")
 
-        filtered = await client.search_candidates(
+        filtered = await client.find_candidates(
             first_name=target_name, limit=25
         )
         assert len(filtered) > 0
@@ -89,13 +85,13 @@ class TestSearchCandidates:
             )
 
     async def test_search_with_email_returns_specific_candidate(self):
-        baseline = await client.list_candidates(limit=1)
+        baseline = await client.find_candidates(limit=1)
         assert len(baseline) > 0
         target_email = baseline[0].get("email")
         if not target_email:
             pytest.skip("First candidate has no email")
 
-        filtered = await client.search_candidates(email=target_email, limit=10)
+        filtered = await client.find_candidates(email=target_email, limit=10)
         assert len(filtered) >= 1
         emails = [c.get("email", "").lower() for c in filtered]
         assert target_email.lower() in emails
@@ -103,8 +99,8 @@ class TestSearchCandidates:
     async def test_different_filters_return_different_results(self):
         """Core MAIN-85 regression: different filters must NOT return
         identical result sets."""
-        results_a = await client.search_candidates(country="US", limit=10)
-        results_b = await client.search_candidates(country="India", limit=10)
+        results_a = await client.find_candidates(country="US", limit=10)
+        results_b = await client.find_candidates(country="India", limit=10)
 
         if results_a and results_b:
             slugs_a = {c["slug"] for c in results_a}
@@ -113,11 +109,6 @@ class TestSearchCandidates:
                 "Different country filters returned identical results — "
                 "filters are likely being ignored"
             )
-
-    async def test_search_no_filters_returns_empty(self):
-        """The /candidates/search endpoint returns [] with no filters."""
-        results = await client.search_candidates()
-        assert results == []
 
 
 class TestJobs:
