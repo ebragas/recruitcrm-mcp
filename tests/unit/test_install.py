@@ -10,7 +10,7 @@ import pytest
 
 from recruit_crm_mcp.install import (
     backup_config,
-    check_uvx,
+    find_uvx,
     inject_server,
     load_config,
     main,
@@ -18,29 +18,36 @@ from recruit_crm_mcp.install import (
     write_config,
 )
 
+UVX_PATH = "/usr/local/bin/uvx"
 
-class TestCheckUvx:
+
+class TestFindUvx:
     def test_found(self):
-        with patch("recruit_crm_mcp.install.shutil.which", return_value="/usr/local/bin/uvx"):
-            assert check_uvx() is True
+        with patch("recruit_crm_mcp.install.shutil.which", return_value=UVX_PATH):
+            assert find_uvx() == UVX_PATH
 
     def test_not_found(self):
         with patch("recruit_crm_mcp.install.shutil.which", return_value=None):
-            assert check_uvx() is False
+            assert find_uvx() is None
 
 
 class TestInjectServer:
     def test_empty_config(self):
-        config = inject_server({}, "test-key-123")
+        config = inject_server({}, "test-key-123", UVX_PATH)
         assert config == {
             "mcpServers": {
                 "recruit-crm": {
-                    "command": "uvx",
+                    "command": UVX_PATH,
                     "args": ["recruit-crm-mcp"],
                     "env": {"RECRUIT_CRM_API_KEY": "test-key-123"},
                 }
             }
         }
+
+    def test_uses_absolute_uvx_path(self):
+        config = inject_server({}, "key", "/home/user/.local/bin/uvx")
+        entry = config["mcpServers"]["recruit-crm"]
+        assert entry["command"] == "/home/user/.local/bin/uvx"
 
     def test_preserves_existing_servers(self):
         config = {
@@ -48,7 +55,7 @@ class TestInjectServer:
                 "other-server": {"command": "other", "args": []},
             }
         }
-        result = inject_server(config, "key-456")
+        result = inject_server(config, "key-456", UVX_PATH)
         assert "other-server" in result["mcpServers"]
         assert "recruit-crm" in result["mcpServers"]
 
@@ -61,14 +68,14 @@ class TestInjectServer:
                 }
             }
         }
-        result = inject_server(config, "new-key")
+        result = inject_server(config, "new-key", UVX_PATH)
         entry = result["mcpServers"]["recruit-crm"]
-        assert entry["command"] == "uvx"
+        assert entry["command"] == UVX_PATH
         assert entry["env"]["RECRUIT_CRM_API_KEY"] == "new-key"
 
     def test_preserves_non_mcp_keys(self):
         config = {"theme": "dark", "mcpServers": {}}
-        result = inject_server(config, "key")
+        result = inject_server(config, "key", UVX_PATH)
         assert result["theme"] == "dark"
 
 
@@ -180,7 +187,7 @@ class TestAutoInstallUv:
     def test_darwin_success(self):
         with (
             patch("recruit_crm_mcp.install.subprocess.run") as mock_run,
-            patch("recruit_crm_mcp.install.check_uvx", return_value=True),
+            patch("recruit_crm_mcp.install.find_uvx", return_value=UVX_PATH),
         ):
             from recruit_crm_mcp.install import _auto_install_uv
 
@@ -203,7 +210,7 @@ class TestAutoInstallUv:
     def test_uvx_not_on_path_after_install(self):
         with (
             patch("recruit_crm_mcp.install.subprocess.run"),
-            patch("recruit_crm_mcp.install.check_uvx", return_value=False),
+            patch("recruit_crm_mcp.install.find_uvx", return_value=None),
         ):
             from recruit_crm_mcp.install import _auto_install_uv
 
@@ -216,14 +223,16 @@ class TestMain:
         """Full flow: uvx present, no existing config, writes new config."""
         config_path = tmp_path / "claude_desktop_config.json"
         with (
-            patch("recruit_crm_mcp.install.check_uvx", return_value=True),
+            patch("recruit_crm_mcp.install.find_uvx", return_value=UVX_PATH),
             patch("recruit_crm_mcp.install.get_config_path", return_value=config_path),
             patch("recruit_crm_mcp.install.getpass", return_value="test-key-123"),
         ):
             main()
 
         data = json.loads(config_path.read_text())
-        assert data["mcpServers"]["recruit-crm"]["env"]["RECRUIT_CRM_API_KEY"] == "test-key-123"
+        entry = data["mcpServers"]["recruit-crm"]
+        assert entry["command"] == UVX_PATH
+        assert entry["env"]["RECRUIT_CRM_API_KEY"] == "test-key-123"
 
     def test_success_existing_config(self, tmp_path: Path):
         """Full flow: existing config is backed up and merged."""
@@ -231,7 +240,7 @@ class TestMain:
         config_path.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
 
         with (
-            patch("recruit_crm_mcp.install.check_uvx", return_value=True),
+            patch("recruit_crm_mcp.install.find_uvx", return_value=UVX_PATH),
             patch("recruit_crm_mcp.install.get_config_path", return_value=config_path),
             patch("recruit_crm_mcp.install.getpass", return_value="key-456"),
         ):
@@ -245,10 +254,10 @@ class TestMain:
         assert len(backups) == 1
 
     def test_missing_uvx_triggers_prompt(self, tmp_path: Path):
-        """When uvx is missing, prompt_install_uv is called."""
+        """When uvx is missing, prompt_install_uv is called, then find_uvx resolves."""
         config_path = tmp_path / "claude_desktop_config.json"
         with (
-            patch("recruit_crm_mcp.install.check_uvx", return_value=False),
+            patch("recruit_crm_mcp.install.find_uvx", side_effect=[None, UVX_PATH]),
             patch("recruit_crm_mcp.install.get_config_path", return_value=config_path),
             patch("recruit_crm_mcp.install.prompt_install_uv") as mock_prompt,
             patch("recruit_crm_mcp.install.getpass", return_value="key"),
@@ -259,7 +268,7 @@ class TestMain:
     def test_keyboard_interrupt(self, tmp_path: Path):
         """Ctrl+C exits gracefully without a traceback."""
         with (
-            patch("recruit_crm_mcp.install.check_uvx", side_effect=KeyboardInterrupt),
+            patch("recruit_crm_mcp.install.find_uvx", side_effect=KeyboardInterrupt),
         ):
             # Should return cleanly, not raise
             main()
@@ -268,7 +277,7 @@ class TestMain:
         """Empty API key input causes a re-prompt."""
         config_path = tmp_path / "claude_desktop_config.json"
         with (
-            patch("recruit_crm_mcp.install.check_uvx", return_value=True),
+            patch("recruit_crm_mcp.install.find_uvx", return_value=UVX_PATH),
             patch("recruit_crm_mcp.install.get_config_path", return_value=config_path),
             patch("recruit_crm_mcp.install.getpass", side_effect=["", "  ", "real-key"]),
         ):
