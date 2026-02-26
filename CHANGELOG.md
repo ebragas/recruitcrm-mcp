@@ -1,6 +1,48 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-02-26)
+
+### Features
+
+- Add curl | bash bootstrap installer and remove chmod on config
+  ([#7](https://github.com/ebragas/recruitcrm-mcp/pull/7),
+  [`84a8b4a`](https://github.com/ebragas/recruitcrm-mcp/commit/84a8b4a97aba5da5e82b02283cd3c8b6e20ba98d))
+
+* fix(install): remove chmod 0o600 on Claude Desktop config file
+
+The installer was setting restrictive permissions on claude_desktop_config.json after writing it.
+  This is an opinionated change that could conflict with Claude Desktop's own expectations for its
+  config file. The file already lives in the user's Application Support directory which is
+  user-scoped on macOS.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+* feat(install): add curl | bash bootstrap script
+
+Adds install.sh that installs uv if missing, sources the env file so uvx is available immediately
+  (no terminal restart), then hands off to the interactive Python installer via uvx.
+
+One-liner for end users: curl -LsSf
+  https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.sh | bash
+
+* fix(install): add curl preflight check and download-then-run option
+
+- Add curl availability check at the top of install.sh with clear error - Add download-then-review
+  alternative in README for security-conscious users
+
+* fix(install): remove redundant curl preflight check
+
+curl is the delivery mechanism for the script itself, so checking for it inside the script is
+  unnecessary.
+
+---------
+
+Co-authored-by: Eric Bragas <eric@ebragas.com>
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.4.0 (2026-02-26)
 
 ### Bug Fixes
@@ -13,6 +55,11 @@
   tests for Retry-After cap and X-RateLimit-Reset in the past
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.4.0
+  ([`2694cff`](https://github.com/ebragas/recruitcrm-mcp/commit/2694cff6801d6b2a49077ec129ff33349b0d67ec))
 
 ### Features
 
