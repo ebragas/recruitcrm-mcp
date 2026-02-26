@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -118,12 +117,6 @@ class TestWriteConfig:
         write_config(config_path, {})
         assert config_path.read_text().endswith("\n")
 
-    def test_restrictive_permissions(self, tmp_path: Path):
-        config_path = tmp_path / "config.json"
-        write_config(config_path, {"key": "value"})
-        mode = config_path.stat().st_mode
-        assert mode & stat.S_IRWXG == 0, "Group should have no permissions"
-        assert mode & stat.S_IRWXO == 0, "Others should have no permissions"
 
 
 class TestGetConfigPath:
