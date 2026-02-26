@@ -1,6 +1,117 @@
 # CHANGELOG
 
 
+## v0.6.2 (2026-02-26)
+
+### Bug Fixes
+
+- **client**: Update search_candidates docstring to match behavior
+  ([`ac76f91`](https://github.com/ebragas/recruitcrm-mcp/commit/ac76f912ebb5b4713e60cc0e589cafdd8bd5a29c))
+
+Filters are optional, not required — align client docstring with the server docstring updated in the
+  previous commit.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- **docs**: Address PR review comments on search/list tools
+  ([`829a579`](https://github.com/ebragas/recruitcrm-mcp/commit/829a5793c6777e297abf3505c997b906dbcff7c2))
+
+- Remove unverified "reverse chronological order" claim from list_candidates - Update
+  search_candidates docstring to reflect actual behavior (no filters = empty list) - Guard
+  integration test against falsy first_name
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- **search**: Don't send per_page to search endpoint, add list_candidates
+  ([`7b394b2`](https://github.com/ebragas/recruitcrm-mcp/commit/7b394b2520497d570bee8aea932d54e53a9aabe5))
+
+The /candidates/search endpoint rejects per_page with 400. It also returns [] with no filters, so a
+  separate list_candidates function (hitting /candidates) is needed for unfiltered browsing.
+
+Adds integration tests that confirm the MAIN-85 fix: filters actually narrow results, and different
+  filters produce different result sets.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- **search**: Use correct API endpoint and params for candidate search
+  ([`e5b740d`](https://github.com/ebragas/recruitcrm-mcp/commit/e5b740d5bd6475cc2a8a3208ae9a00d254a87f35))
+
+search_candidates was hitting /candidates (list endpoint) for field filters, which silently ignores
+  all filter params. Now always uses /candidates/search with the params the API actually supports:
+  first_name, last_name, email, country, state.
+
+Removes unsupported params (query, city, job_title) that never worked.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- Gitignore fetched API docs
+  ([`7b2eebc`](https://github.com/ebragas/recruitcrm-mcp/commit/7b2eebcae07a2eae062a77473865729a2f69f123))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Merge main and reconcile remote branch
+  ([`92bda65`](https://github.com/ebragas/recruitcrm-mcp/commit/92bda654e27eebac4b36a7cbcc9b6a03e8e2af22))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Merge main into MAIN-85/fix-candidate-search
+  ([`c5e8067`](https://github.com/ebragas/recruitcrm-mcp/commit/c5e8067ffcd1eb8cc84fc833df562167c7cfa005))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Documentation
+
+- Update CLAUDE.md to reflect eager client init pattern
+  ([`66cebbf`](https://github.com/ebragas/recruitcrm-mcp/commit/66cebbfc98f9fc21cce0d329d16a243fd9520c31))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Update README tools table for new search params
+  ([`d2e7c1d`](https://github.com/ebragas/recruitcrm-mcp/commit/d2e7c1dd13f292352423ef4f17c254814b69c8a0))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Refactoring
+
+- Merge list_jobs into find_jobs with dynamic status resolution
+  ([`8b78b3e`](https://github.com/ebragas/recruitcrm-mcp/commit/8b78b3e83ea25138ceb907ffca6b18a00ca10fcf))
+
+Replace list_jobs with find_jobs using the same pattern as find_candidates: filters present →
+  /jobs/search, no filters → /jobs.
+
+New filters: name, status, city, country, company_name. Status labels (e.g. "Open", "On Hold") are
+  resolved to API integer IDs via /jobs-pipeline, cached for the session. Closed status (ID 0)
+  returns a clear error since the API treats it as no-filter.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Merge search_candidates and list_candidates into find_candidates
+  ([`22404b7`](https://github.com/ebragas/recruitcrm-mcp/commit/22404b769879d4c629528f9827ac124eef5d1165))
+
+Single tool that routes internally: filters present → /candidates/search, no filters → /candidates.
+  Simpler agent UX — one intent, one tool.
+
+Also extracts _extract_results helper to DRY up response parsing.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- **client**: Eagerly init httpx client, document sibling error
+  ([`ce0f3f5`](https://github.com/ebragas/recruitcrm-mcp/commit/ce0f3f53d84d35d07fafb7080782eb6aba37c138))
+
+"Sibling tool call errored" is a Claude Code client-side behavior — when one parallel tool call
+  fails, Claude Code cancels the siblings. The root cause was the broken filters in MAIN-85/MAIN-87
+  causing tool errors that cascaded. No server concurrency bug exists.
+
+Eagerly initializes the httpx AsyncClient in the server lifespan handler instead of lazy-init,
+  making the lifecycle explicit.
+
+Documents API quirks and concurrency notes in CLAUDE.md.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.6.1 (2026-02-26)
 
 ### Chores
@@ -9,6 +120,9 @@
   ([`ae2e976`](https://github.com/ebragas/recruitcrm-mcp/commit/ae2e976b29e34a03bf33a39314cd0bf68b34640c))
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- **release**: 0.6.1
+  ([`d6223b7`](https://github.com/ebragas/recruitcrm-mcp/commit/d6223b73fb6d7735be3e0d60d80854a93d6159e2))
 
 
 ## v0.6.0 (2026-02-26)
