@@ -105,8 +105,8 @@ async def search_candidates(
 ) -> list[dict]:
     """Search for candidates via the /candidates/search endpoint.
 
-    At least one filter must be provided — the API returns an empty list
-    when called with no filters.  All filters use like-matching by default.
+    Filters are optional; if none are provided, the API returns an empty
+    list.  All provided filters use like-matching by default.
 
     Note: the search endpoint does not accept ``per_page``; it always
     returns 100 results per page.  We enforce ``limit`` client-side.
