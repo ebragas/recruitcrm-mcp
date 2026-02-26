@@ -1,7 +1,38 @@
 # CHANGELOG
 
 
+## v0.6.1 (2026-02-26)
+
+### Chores
+
+- Merge main into MAIN-87/fix-jobs-status-filter
+  ([`ae2e976`](https://github.com/ebragas/recruitcrm-mcp/commit/ae2e976b29e34a03bf33a39314cd0bf68b34640c))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.6.0 (2026-02-26)
+
+### Bug Fixes
+
+- **jobs**: Use /jobs/search with job_status param for status filtering
+  ([`6fb484e`](https://github.com/ebragas/recruitcrm-mcp/commit/6fb484e85b6be63d52d4a150ad4ff0464f55faec))
+
+list_jobs was hitting /jobs which silently ignores filter params. Now split into list_jobs
+  (unfiltered browse via /jobs) and search_jobs (filtered search via /jobs/search with job_status,
+  name, city, country, company_name).
+
+Status labels (Open, Closed, etc.) are mapped to the integer IDs the API expects. Note: "Closed" (ID
+  0) is unsearchable due to an API quirk where 0 is treated as no-filter.
+
+Also adds no-backward-compat convention to CLAUDE.md and gitignores fetched API docs.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.6.0
+  ([`424da7a`](https://github.com/ebragas/recruitcrm-mcp/commit/424da7a971308b8f33cb558e0cc4f79df82f6bd6))
 
 ### Features
 
