@@ -16,6 +16,7 @@ except PackageNotFoundError:
 
 @asynccontextmanager
 async def _lifespan(server: FastMCP):
+    client.init_client()
     yield
     await client.aclose_client()
 

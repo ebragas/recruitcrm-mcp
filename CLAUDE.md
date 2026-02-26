@@ -43,6 +43,16 @@ uv run <cmd>     # run commands in the venv
 - Job status → `job_status` object: `{"id": 1, "label": "Open"}`
 - Job description → `job_description_text` (HTML)
 - Pagination: candidates min 100/page, jobs min 15/page — `per_page` below minimums is ignored
+- Search endpoints (`/candidates/search`, `/jobs/search`) reject `per_page` with 400 — use `limit` or omit and enforce client-side
+- Search endpoints return `[]` when called with no filter params
+- "Closed" job status has ID `0`, which the API treats as no-filter — closed jobs cannot be filtered via `/jobs/search`
+
+### Concurrency
+
+- **"Sibling tool call errored"** is a Claude Code client-side behavior, not a server bug. When one tool call in a parallel batch fails, Claude Code cancels the remaining siblings. The fix is to ensure tools don't error — not to handle concurrency differently.
+- FastMCP dispatches each incoming `tools/call` as a concurrent async task via `anyio.create_task_group`
+- `httpx.AsyncClient` is safe for concurrent async use within a single event loop
+- The shared `_client` singleton lazy-init is safe because `httpx.AsyncClient()` is a synchronous constructor (no `await` between check and assign)
 
 ## Conventions
 
@@ -51,7 +61,8 @@ uv run <cmd>     # run commands in the venv
 - Branch from `main` or parent feature branch for sequential work
 - Branch naming: `<issue-id>/<short-description>` (e.g., `MAIN-73/scaffold-mcp`)
 - Linear auto-tracks branches with issue IDs in the name
-- When branching off a feature branch, set that branch as the PR base (`gh pr create --base <parent-branch>`) so the diff only shows the new work
+- **Sequential issue chains:** When working multiple issues in sequence, branch each new issue off the previous issue's branch (not `main`). Set the parent branch as the PR base (`gh pr create --base <parent-branch>`) so each PR's diff only shows the new work. Link the parent PR in the description if helpful.
+- **PR titles must include the Linear issue ID** (e.g., `MAIN-87: fix jobs status filter`)
 
 ### Code Style
 
