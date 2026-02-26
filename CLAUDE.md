@@ -52,7 +52,7 @@ uv run <cmd>     # run commands in the venv
 - **"Sibling tool call errored"** is a Claude Code client-side behavior, not a server bug. When one tool call in a parallel batch fails, Claude Code cancels the remaining siblings. The fix is to ensure tools don't error — not to handle concurrency differently.
 - FastMCP dispatches each incoming `tools/call` as a concurrent async task via `anyio.create_task_group`
 - `httpx.AsyncClient` is safe for concurrent async use within a single event loop
-- The shared `_client` singleton lazy-init is safe because `httpx.AsyncClient()` is a synchronous constructor (no `await` between check and assign)
+- The shared `_client` is eagerly initialized once in the lifespan handler (via `init_client()`), then reused across requests; `httpx.AsyncClient` is safe for concurrent async use within a single event loop
 
 ## Conventions
 
