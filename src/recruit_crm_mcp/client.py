@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 API_BASE = "https://api.recruitcrm.io/v1"
 
 _client: httpx.AsyncClient | None = None
+_job_statuses: dict[str, int] | None = None
 
 
 def _get_api_key() -> str:
@@ -38,11 +39,12 @@ async def _get_client() -> httpx.AsyncClient:
 
 
 async def aclose_client() -> None:
-    """Close the shared AsyncClient. Call on application shutdown."""
-    global _client
+    """Close the shared AsyncClient and clear caches. Call on application shutdown."""
+    global _client, _job_statuses
     if _client is not None:
         await _client.aclose()
         _client = None
+    _job_statuses = None
 
 
 def _parse_retry_after(resp: httpx.Response) -> float:
@@ -95,45 +97,49 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
     return resp.json()
 
 
-async def search_candidates(
-    query: str | None = None,
-    email: str | None = None,
-    city: str | None = None,
-    job_title: str | None = None,
-    limit: int = 10,
-) -> list[dict]:
-    """Search for candidates using available filters.
+def _extract_results(data: Any) -> list[dict]:
+    """Normalize API response into a plain list of records."""
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    if isinstance(data, list):
+        return data
+    return [data] if data else []
 
-    Note: ``query`` (free-text search) and field filters (email, city,
-    job_title) are mutually exclusive.  When any field filter is provided,
-    ``query`` is ignored and the list endpoint with field filters is used
-    instead of the search endpoint.
+
+async def find_candidates(
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    country: str | None = None,
+    state: str | None = None,
+    limit: int = 25,
+) -> list[dict]:
+    """Find candidates — searches when filters are provided, lists otherwise.
+
+    With filters: calls ``/candidates/search`` (LIKE-style partial matching,
+    AND logic).  Without filters: calls ``/candidates`` to browse.
+
+    Both endpoints return 100 results per page minimum; ``limit`` is
+    enforced client-side.
     """
-    params: dict[str, Any] = {"per_page": limit}
+    params: dict[str, Any] = {}
+    if first_name:
+        params["first_name"] = first_name
+    if last_name:
+        params["last_name"] = last_name
     if email:
         params["email"] = email
-    if city:
-        params["city"] = city
-    if job_title:
-        params["job_title"] = job_title
+    if country:
+        params["country"] = country
+    if state:
+        params["state"] = state
 
-    # Use search endpoint for free-text queries, list endpoint for field filters
-    if query and not any([email, city, job_title]):
-        params["search"] = query
+    if params:
         data = await get("/candidates/search", params)
     else:
-        data = await get("/candidates", params)
+        data = await get("/candidates", {"per_page": limit})
 
-    # API returns paginated response with "data" key
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    # API ignores per_page below its minimum (100), so enforce limit client-side
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_candidate(candidate_slug: str) -> dict:
@@ -141,22 +147,62 @@ async def get_candidate(candidate_slug: str) -> dict:
     return await get(f"/candidates/{candidate_slug}")
 
 
-async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
-    """List jobs, optionally filtered by status."""
-    params: dict[str, Any] = {"per_page": limit}
+async def _get_job_status_id(label: str) -> int:
+    """Resolve a job status label to its API ID, fetching the mapping on first use."""
+    global _job_statuses
+    if _job_statuses is None:
+        data = await get("/jobs-pipeline")
+        _job_statuses = {s["label"].lower(): s["id"] for s in data}
+
+    status_id = _job_statuses.get(label.lower())
+    if status_id is None:
+        valid = ", ".join(s.title() for s in sorted(_job_statuses))
+        raise ValueError(f"Unknown job status {label!r}. Valid statuses: {valid}")
+    if status_id == 0:
+        raise ValueError(
+            f"Cannot filter by status {label!r} — the API treats status ID 0 "
+            "as no filter. Use get_job to check individual job statuses."
+        )
+    return status_id
+
+
+async def find_jobs(
+    name: str | None = None,
+    status: str | None = None,
+    city: str | None = None,
+    country: str | None = None,
+    company_name: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Find jobs — searches when filters are provided, lists otherwise.
+
+    With filters: calls ``/jobs/search`` (LIKE-style partial matching,
+    AND logic).  Without filters: calls ``/jobs`` to browse.
+
+    ``status`` accepts a label string (e.g. "Open", "On Hold") which is
+    resolved to the API's integer ID via ``/jobs-pipeline``.
+
+    Both endpoints return at least 15-100 results per page; ``limit`` is
+    enforced client-side.
+    """
+    params: dict[str, Any] = {}
+    if name:
+        params["name"] = name
     if status:
-        params["status"] = status
-    data = await get("/jobs", params)
+        params["job_status"] = await _get_job_status_id(status)
+    if city:
+        params["city"] = city
+    if country:
+        params["country"] = country
+    if company_name:
+        params["company_name"] = company_name
 
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
+    if params:
+        data = await get("/jobs/search", params)
     else:
-        results = [data] if data else []
+        data = await get("/jobs", {"per_page": limit})
 
-    # API ignores per_page below its minimum (15), so enforce limit client-side
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_job(job_slug: str) -> dict:

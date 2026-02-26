@@ -35,22 +35,26 @@ def ping() -> dict:
 
 
 @mcp.tool()
-async def search_candidates(
-    query: str | None = None,
+async def find_candidates(
+    first_name: str | None = None,
+    last_name: str | None = None,
     email: str | None = None,
-    city: str | None = None,
-    job_title: str | None = None,
-    limit: int = 10,
+    country: str | None = None,
+    state: str | None = None,
+    limit: int = 25,
 ) -> list[dict]:
-    """Search for candidates by free-text query, email, city, or job title.
+    """Find candidates — searches with filters or lists all without.
 
-    Use `query` for general search, or filter by specific fields.
-    `query` and field filters are mutually exclusive — when any field filter
-    is provided, `query` is ignored.
-    Returns a list of matching candidate summaries.
+    When one or more filters are provided, searches using partial (LIKE-style)
+    matching with AND logic. When no filters are provided, lists candidates.
     """
-    results = await client.search_candidates(
-        query=query, email=email, city=city, job_title=job_title, limit=limit
+    results = await client.find_candidates(
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        country=country,
+        state=state,
+        limit=limit,
     )
     return [_summarize_candidate(c) for c in results]
 
@@ -62,12 +66,28 @@ async def get_candidate(candidate_id: str) -> dict:
 
 
 @mcp.tool()
-async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
-    """List job requisitions, optionally filtered by status (e.g. 'Open', 'Closed').
+async def find_jobs(
+    name: str | None = None,
+    status: str | None = None,
+    city: str | None = None,
+    country: str | None = None,
+    company_name: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Find jobs — searches with filters or lists all without.
 
-    Returns a list of job summaries.
+    When one or more filters are provided, searches using partial (LIKE-style)
+    matching with AND logic. When no filters are provided, lists all jobs.
+    Status accepts labels like 'Open', 'On Hold', etc.
     """
-    results = await client.list_jobs(status=status, limit=limit)
+    results = await client.find_jobs(
+        name=name,
+        status=status,
+        city=city,
+        country=country,
+        company_name=company_name,
+        limit=limit,
+    )
     return [_summarize_job(j) for j in results]
 
 
