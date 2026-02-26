@@ -42,7 +42,7 @@ def fetch_url(url: str) -> bytes:
                 time.sleep(wait)
                 continue
             raise
-    return b""  # unreachable
+    raise RuntimeError("unreachable")
 
 
 def fetch_json(url: str) -> dict:
@@ -118,14 +118,8 @@ def flatten_toc(toc: dict) -> list:
 
 def slugify(name: str) -> str:
     """Convert a name to a directory/file-safe slug: 'Call Logs' → 'call-logs'."""
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-
-
-def endpoint_filename(uri: str, title: str) -> str:
-    """Build a filename for an endpoint: 'get-search-for-candidates.json'."""
-    # HTTP method is the last path segment
-    method = uri.rsplit("/", 1)[-1].lower() if "/" in uri else ""
-    return f"{method}-{slugify(title)}.json"
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or "unnamed"
 
 
 def article_filename(uri: str) -> str:
@@ -213,8 +207,9 @@ def save_index(items: list, file_map: dict) -> None:
         "total": len(items),
         "files_written": len(file_map),
         "items": [
-            {**item, "file": file_map.get(item["uri"], "")}
+            {**item, "file": file_map[item["uri"]]}
             for item in items
+            if item["uri"] in file_map
         ],
     }
 
