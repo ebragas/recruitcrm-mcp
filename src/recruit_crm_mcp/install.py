@@ -11,10 +11,7 @@ from datetime import datetime, timezone
 from getpass import getpass
 from pathlib import Path
 
-MCP_SERVER_ENTRY = {
-    "command": "uvx",
-    "args": ["recruit-crm-mcp"],
-}
+MCP_SERVER_ARGS = ["recruit-crm-mcp"]
 
 
 def get_config_path() -> Path:
@@ -39,9 +36,9 @@ def get_config_path() -> Path:
     )
 
 
-def check_uvx() -> bool:
-    """Check whether uvx is available on PATH."""
-    return shutil.which("uvx") is not None
+def find_uvx() -> str | None:
+    """Return the absolute path to uvx, or None if not found."""
+    return shutil.which("uvx")
 
 
 def prompt_install_uv() -> None:
@@ -92,7 +89,7 @@ def _auto_install_uv(system: str) -> None:
 
     # The installer may have modified shell profile files that won't be
     # reloaded in the current process, so uvx may not be on PATH yet.
-    if not check_uvx():
+    if not find_uvx():
         raise SystemExit(
             "uv installation completed, but 'uvx' is not yet on your PATH.\n"
             "Please restart your terminal (or open a new one) and re-run this installer."
@@ -125,12 +122,16 @@ def load_config(config_path: Path) -> dict:
         )
 
 
-def inject_server(config: dict, api_key: str) -> dict:
+def inject_server(config: dict, api_key: str, uvx_path: str) -> dict:
     """Add or update the recruit-crm MCP server entry in the config."""
     if "mcpServers" not in config:
         config["mcpServers"] = {}
 
-    entry = {**MCP_SERVER_ENTRY, "env": {"RECRUIT_CRM_API_KEY": api_key}}
+    entry = {
+        "command": uvx_path,
+        "args": MCP_SERVER_ARGS,
+        "env": {"RECRUIT_CRM_API_KEY": api_key},
+    }
     config["mcpServers"]["recruit-crm"] = entry
     return config
 
@@ -151,8 +152,12 @@ def main() -> None:
         print()
 
         # 1. Pre-requisite check
-        if not check_uvx():
+        uvx_path = find_uvx()
+        if not uvx_path:
             prompt_install_uv()
+            uvx_path = find_uvx()
+            if not uvx_path:
+                raise SystemExit("Error: could not locate uvx after installation.")
 
         # 2. Detect config path
         config_path = get_config_path()
@@ -179,7 +184,7 @@ def main() -> None:
 
         # 5. Load, inject, write
         config = load_config(config_path)
-        config = inject_server(config, api_key.strip())
+        config = inject_server(config, api_key.strip(), uvx_path)
         write_config(config_path, config)
 
         print(f"  ✓ Wrote updated config to:\n    {config_path}")
