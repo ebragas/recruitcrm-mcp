@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import time
 from typing import Any
 
 import httpx
@@ -53,7 +54,9 @@ def _parse_retry_after(resp: httpx.Response) -> float:
     retry_after = resp.headers.get("Retry-After")
     if retry_after:
         try:
-            return float(retry_after)
+            wait = float(retry_after)
+            if wait > 0:
+                return min(wait, 120.0)
         except ValueError:
             pass
 
@@ -61,8 +64,6 @@ def _parse_retry_after(resp: httpx.Response) -> float:
     reset = resp.headers.get("X-RateLimit-Reset")
     if reset:
         try:
-            import time
-
             wait = float(reset) - time.time()
             if wait > 0:
                 return min(wait, 120.0)

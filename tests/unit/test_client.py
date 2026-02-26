@@ -1,3 +1,5 @@
+import logging
+import time
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -132,17 +134,22 @@ class TestParseRetryAfter:
         resp = _make_response(429, headers={"Retry-After": "2.5"})
         assert client._parse_retry_after(resp) == 2.5
 
-    def test_x_ratelimit_reset_header(self):
-        import time
+    def test_retry_after_capped_at_120(self):
+        resp = _make_response(429, headers={"Retry-After": "3600"})
+        assert client._parse_retry_after(resp) == 120.0
 
+    def test_x_ratelimit_reset_header(self):
         future = time.time() + 30
         resp = _make_response(429, headers={"X-RateLimit-Reset": str(future)})
         wait = client._parse_retry_after(resp)
         assert 28 < wait <= 30
 
-    def test_x_ratelimit_reset_capped_at_120(self):
-        import time
+    def test_x_ratelimit_reset_in_past_falls_through(self):
+        past = time.time() - 10
+        resp = _make_response(429, headers={"X-RateLimit-Reset": str(past)})
+        assert client._parse_retry_after(resp) == 10.0
 
+    def test_x_ratelimit_reset_capped_at_120(self):
         future = time.time() + 999
         resp = _make_response(429, headers={"X-RateLimit-Reset": str(future)})
         assert client._parse_retry_after(resp) == 120.0
@@ -223,8 +230,6 @@ class TestRateLimitRetry:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=[rate_limited, success])
         monkeypatch.setattr(client, "_client", mock_client)
-
-        import logging
 
         with patch("recruit_crm_mcp.client.asyncio.sleep"):
             with caplog.at_level(logging.WARNING, logger="recruit_crm_mcp.client"):
