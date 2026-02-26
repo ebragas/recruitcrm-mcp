@@ -67,7 +67,7 @@ make check           # run lint + tests
 | `ping` | Health check — verify the server is running and API key is configured |
 | `find_candidates` | Find candidates — search with filters or list all |
 | `get_candidate` | Get full profile details for a candidate by slug/ID |
-| `list_jobs` | List job requisitions, optionally filtered by status |
+| `find_jobs` | Find jobs — search with filters or list all |
 | `get_job` | Get full details for a job by slug/ID |
 
 ## Resources

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 API_BASE = "https://api.recruitcrm.io/v1"
 
 _client: httpx.AsyncClient | None = None
+_job_statuses: dict[str, int] | None = None
 
 
 def _get_api_key() -> str:
@@ -38,11 +39,12 @@ async def _get_client() -> httpx.AsyncClient:
 
 
 async def aclose_client() -> None:
-    """Close the shared AsyncClient. Call on application shutdown."""
-    global _client
+    """Close the shared AsyncClient and clear caches. Call on application shutdown."""
+    global _client, _job_statuses
     if _client is not None:
         await _client.aclose()
         _client = None
+    _job_statuses = None
 
 
 def _parse_retry_after(resp: httpx.Response) -> float:
@@ -145,14 +147,61 @@ async def get_candidate(candidate_slug: str) -> dict:
     return await get(f"/candidates/{candidate_slug}")
 
 
-async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
-    """List jobs, optionally filtered by status."""
-    params: dict[str, Any] = {"per_page": limit}
-    if status:
-        params["status"] = status
-    data = await get("/jobs", params)
+async def _get_job_status_id(label: str) -> int:
+    """Resolve a job status label to its API ID, fetching the mapping on first use."""
+    global _job_statuses
+    if _job_statuses is None:
+        data = await get("/jobs-pipeline")
+        _job_statuses = {s["label"].lower(): s["id"] for s in data}
 
-    # API ignores per_page below its minimum (15), so enforce limit client-side
+    status_id = _job_statuses.get(label.lower())
+    if status_id is None:
+        valid = ", ".join(s.title() for s in sorted(_job_statuses))
+        raise ValueError(f"Unknown job status {label!r}. Valid statuses: {valid}")
+    if status_id == 0:
+        raise ValueError(
+            f"Cannot filter by status {label!r} — the API treats status ID 0 "
+            "as no filter. Use get_job to check individual job statuses."
+        )
+    return status_id
+
+
+async def find_jobs(
+    name: str | None = None,
+    status: str | None = None,
+    city: str | None = None,
+    country: str | None = None,
+    company_name: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Find jobs — searches when filters are provided, lists otherwise.
+
+    With filters: calls ``/jobs/search`` (LIKE-style partial matching,
+    AND logic).  Without filters: calls ``/jobs`` to browse.
+
+    ``status`` accepts a label string (e.g. "Open", "On Hold") which is
+    resolved to the API's integer ID via ``/jobs-pipeline``.
+
+    Both endpoints return at least 15-100 results per page; ``limit`` is
+    enforced client-side.
+    """
+    params: dict[str, Any] = {}
+    if name:
+        params["name"] = name
+    if status:
+        params["job_status"] = await _get_job_status_id(status)
+    if city:
+        params["city"] = city
+    if country:
+        params["country"] = country
+    if company_name:
+        params["company_name"] = company_name
+
+    if params:
+        data = await get("/jobs/search", params)
+    else:
+        data = await get("/jobs", {"per_page": limit})
+
     return _extract_results(data)[:limit]
 
 

@@ -111,36 +111,47 @@ class TestFindCandidates:
             )
 
 
-class TestJobs:
+class TestFindJobs:
     async def test_list_returns_results(self):
-        results = await client.list_jobs(limit=3)
+        results = await client.find_jobs(limit=3)
         assert len(results) > 0
 
     async def test_job_results_have_expected_fields(self):
-        results = await client.list_jobs(limit=1)
+        results = await client.find_jobs(limit=1)
         job = results[0]
         assert "slug" in job
         assert "name" in job
         assert "job_status" in job
 
     async def test_job_status_is_object(self):
-        results = await client.list_jobs(limit=1)
+        results = await client.find_jobs(limit=1)
         job_status = results[0]["job_status"]
         assert isinstance(job_status, dict)
         assert "id" in job_status
         assert "label" in job_status
 
     async def test_summarize_job_from_live_data(self):
-        results = await client.list_jobs(limit=1)
+        results = await client.find_jobs(limit=1)
         summary = _summarize_job(results[0])
         assert summary["slug"] is not None
         assert summary["name"]
         assert summary["status"]  # should resolve from job_status.label
 
     async def test_get_job_by_slug(self):
-        results = await client.list_jobs(limit=1)
+        results = await client.find_jobs(limit=1)
         slug = results[0]["slug"]
         job = await client.get_job(slug)
         assert job["slug"] == slug
         assert "name" in job
         assert "job_description_text" in job
+
+    async def test_search_by_status(self):
+        results = await client.find_jobs(status="Open", limit=5)
+        assert len(results) > 0
+        for job in results:
+            assert job["job_status"]["label"] == "Open"
+
+    async def test_search_by_country(self):
+        results = await client.find_jobs(country="US", limit=5)
+        # Just verify it doesn't error — results depend on data
+        assert isinstance(results, list)

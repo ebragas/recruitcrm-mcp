@@ -66,12 +66,28 @@ async def get_candidate(candidate_id: str) -> dict:
 
 
 @mcp.tool()
-async def list_jobs(status: str | None = None, limit: int = 20) -> list[dict]:
-    """List job requisitions, optionally filtered by status (e.g. 'Open', 'Closed').
+async def find_jobs(
+    name: str | None = None,
+    status: str | None = None,
+    city: str | None = None,
+    country: str | None = None,
+    company_name: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Find jobs — searches with filters or lists all without.
 
-    Returns a list of job summaries.
+    When one or more filters are provided, searches using partial (LIKE-style)
+    matching with AND logic. When no filters are provided, lists all jobs.
+    Status accepts labels like 'Open', 'On Hold', etc.
     """
-    results = await client.list_jobs(status=status, limit=limit)
+    results = await client.find_jobs(
+        name=name,
+        status=status,
+        city=city,
+        country=country,
+        company_name=company_name,
+        limit=limit,
+    )
     return [_summarize_job(j) for j in results]
 
 
