@@ -1,9 +1,13 @@
 """HTTP client for the Recruit CRM API."""
 
+import asyncio
+import logging
 import os
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.recruitcrm.io/v1"
 
@@ -40,15 +44,52 @@ async def aclose_client() -> None:
         _client = None
 
 
+def _parse_retry_after(resp: httpx.Response) -> float:
+    """Extract wait time from rate limit response headers.
+
+    Checks Retry-After first, then falls back to X-RateLimit headers.
+    Returns a default of 10 seconds if no usable header is found.
+    """
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after:
+        try:
+            return float(retry_after)
+        except ValueError:
+            pass
+
+    # Some APIs provide a reset timestamp (seconds since epoch)
+    reset = resp.headers.get("X-RateLimit-Reset")
+    if reset:
+        try:
+            import time
+
+            wait = float(reset) - time.time()
+            if wait > 0:
+                return min(wait, 120.0)
+        except ValueError:
+            pass
+
+    return 10.0
+
+
 async def get(path: str, params: dict[str, Any] | None = None) -> Any:
-    """Make a GET request to the Recruit CRM API."""
+    """Make a GET request to the Recruit CRM API.
+
+    Retries once on 429 (rate limited) after waiting for the duration
+    indicated by the response headers.
+    """
     client = await _get_client()
-    resp = await client.get(
-        f"{API_BASE}{path}",
-        headers=_headers(),
-        params=params,
-        timeout=30.0,
-    )
+    url = f"{API_BASE}{path}"
+    kwargs = {"headers": _headers(), "params": params, "timeout": 30.0}
+
+    resp = await client.get(url, **kwargs)
+
+    if resp.status_code == 429:
+        wait = _parse_retry_after(resp)
+        logger.warning("Rate limited on %s — retrying in %.1fs", path, wait)
+        await asyncio.sleep(wait)
+        resp = await client.get(url, **kwargs)
+
     resp.raise_for_status()
     return resp.json()
 
