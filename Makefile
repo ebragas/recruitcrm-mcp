@@ -1,4 +1,4 @@
-.PHONY: setup venv clean test coverage integration-test lint check
+.PHONY: setup venv clean test coverage integration-test lint check fetch-docs
 
 setup: venv
 	git config core.hooksPath .githooks
@@ -25,3 +25,6 @@ lint:
 	uv run ruff check src/ tests/
 
 check: lint test
+
+fetch-docs:
+	python3 scripts/fetch_api_docs.py

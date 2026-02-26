@@ -71,6 +71,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Fetched API reference docs (regenerate with: make fetch-docs)
+docs/recruitcrm/
+
 # PyBuilder
 .pybuilder/
 target/
