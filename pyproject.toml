@@ -23,6 +23,7 @@ Issues = "https://github.com/ebragas/recruitcrm-mcp/issues"
 
 [project.scripts]
 recruit-crm-mcp = "recruit_crm_mcp.server:main"
+recruit-crm-mcp-install = "recruit_crm_mcp.install:main"
 
 [build-system]
 requires = ["hatchling"]
