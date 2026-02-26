@@ -1207,7 +1207,7 @@ wheels = [
 
 [[package]]
 name = "recruit-crm-mcp"
-version = "0.1.0"
+version = "0.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },

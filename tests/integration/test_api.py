@@ -62,7 +62,7 @@ class TestCandidates:
         pytest.skip("No candidates with resumes found in first 5 results")
 
 
-class TestJobs:
+class TestListJobs:
     async def test_list_returns_results(self):
         results = await client.list_jobs(limit=3)
         assert len(results) > 0
@@ -95,3 +95,46 @@ class TestJobs:
         assert job["slug"] == slug
         assert "name" in job
         assert "job_description_text" in job
+
+
+class TestSearchJobs:
+    """Regression tests for MAIN-87: status filter was silently ignored."""
+
+    async def test_search_open_returns_only_open(self):
+        results = await client.search_jobs(status="Open", limit=25)
+        assert len(results) > 0
+        for j in results:
+            status = j.get("job_status", {})
+            assert isinstance(status, dict)
+            assert status.get("label") == "Open", (
+                f"Expected status 'Open', got {status.get('label')!r}"
+            )
+
+    async def test_search_canceled_returns_only_canceled(self):
+        # Note: "Closed" has status ID 0, which the API treats as no-filter.
+        # Use "Canceled" (ID 3) instead for this test.
+        results = await client.search_jobs(status="Canceled", limit=25)
+        assert len(results) > 0
+        for j in results:
+            status = j.get("job_status", {})
+            assert status.get("label") == "Canceled", (
+                f"Expected status 'Canceled', got {status.get('label')!r}"
+            )
+
+    async def test_different_statuses_return_different_results(self):
+        """Core MAIN-87 regression: different status filters must NOT
+        return identical result sets."""
+        open_jobs = await client.search_jobs(status="Open", limit=10)
+        canceled_jobs = await client.search_jobs(status="Canceled", limit=10)
+
+        if open_jobs and canceled_jobs:
+            slugs_open = {j["slug"] for j in open_jobs}
+            slugs_canceled = {j["slug"] for j in canceled_jobs}
+            assert slugs_open != slugs_canceled, (
+                "Different status filters returned identical results — "
+                "filters are likely being ignored"
+            )
+
+    async def test_search_no_filters_returns_empty(self):
+        results = await client.search_jobs()
+        assert results == []
