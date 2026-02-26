@@ -1,7 +1,25 @@
 # CHANGELOG
 
 
+## v0.5.1 (2026-02-26)
+
+### Bug Fixes
+
+- **install**: Use absolute path to uvx in Claude Desktop config
+  ([`7bfa346`](https://github.com/ebragas/recruitcrm-mcp/commit/7bfa34645134d8920fe6a1c43d7591eafa30f96d))
+
+Claude Desktop doesn't inherit the user's shell PATH, so a bare "uvx" command fails. Resolve the
+  absolute path via shutil.which() during installation and write that to the config instead.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.5.0 (2026-02-26)
+
+### Chores
+
+- **release**: 0.5.0
+  ([`8d68ace`](https://github.com/ebragas/recruitcrm-mcp/commit/8d68ace1d6bd154da5ff9d86b821da11abea942e))
 
 ### Features
 
