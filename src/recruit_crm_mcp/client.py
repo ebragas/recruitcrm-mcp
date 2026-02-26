@@ -29,12 +29,11 @@ def _headers() -> dict[str, str]:
     }
 
 
-async def _get_client() -> httpx.AsyncClient:
-    """Get a shared AsyncClient instance for connection pooling."""
+def init_client() -> None:
+    """Initialize the shared AsyncClient. Call during server startup."""
     global _client
     if _client is None:
         _client = httpx.AsyncClient()
-    return _client
 
 
 async def aclose_client() -> None:
@@ -43,6 +42,13 @@ async def aclose_client() -> None:
     if _client is not None:
         await _client.aclose()
         _client = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return the shared AsyncClient, which must be initialized first."""
+    if _client is None:
+        raise RuntimeError("HTTP client not initialized — call init_client() first")
+    return _client
 
 
 def _parse_retry_after(resp: httpx.Response) -> float:
@@ -79,7 +85,7 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
     Retries once on 429 (rate limited) after waiting for the duration
     indicated by the response headers.
     """
-    client = await _get_client()
+    client = _get_client()
     url = f"{API_BASE}{path}"
     kwargs = {"headers": _headers(), "params": params, "timeout": 30.0}
 
