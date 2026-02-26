@@ -105,11 +105,13 @@ async def search_candidates(
 ) -> list[dict]:
     """Search for candidates via the /candidates/search endpoint.
 
-    All filter parameters are optional and combined with AND logic.
-    The API supports like-matching by default; pass ``exact_search=true``
-    in future if exact matching is needed.
+    At least one filter must be provided — the API returns an empty list
+    when called with no filters.  All filters use like-matching by default.
+
+    Note: the search endpoint does not accept ``per_page``; it always
+    returns 100 results per page.  We enforce ``limit`` client-side.
     """
-    params: dict[str, Any] = {"per_page": limit}
+    params: dict[str, Any] = {}
     if first_name:
         params["first_name"] = first_name
     if last_name:
@@ -123,7 +125,7 @@ async def search_candidates(
 
     data = await get("/candidates/search", params)
 
-    # API returns paginated response with "data" key
+    # API returns paginated response with "data" key, or [] when no filters
     if isinstance(data, dict) and "data" in data:
         results = data["data"]
     elif isinstance(data, list):
@@ -131,7 +133,26 @@ async def search_candidates(
     else:
         results = [data] if data else []
 
-    # API ignores per_page below its minimum (100), so enforce limit client-side
+    # Search endpoint always returns 100/page, so enforce limit client-side
+    return results[:limit]
+
+
+async def list_candidates(limit: int = 25) -> list[dict]:
+    """List candidates via the /candidates endpoint (no filtering).
+
+    Use this when you need to browse candidates without specific filters.
+    The API always returns at least 100 per page; ``limit`` is enforced
+    client-side.
+    """
+    data = await get("/candidates", {"per_page": limit})
+
+    if isinstance(data, dict) and "data" in data:
+        results = data["data"]
+    elif isinstance(data, list):
+        results = data
+    else:
+        results = [data] if data else []
+
     return results[:limit]
 
 

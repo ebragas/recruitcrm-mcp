@@ -45,8 +45,8 @@ async def search_candidates(
 ) -> list[dict]:
     """Search for candidates by name, email, country, or state.
 
-    All filters are optional and combined with AND logic.
-    Uses like-matching (partial match) by default.
+    At least one filter must be provided. Filters are combined with AND logic
+    and use partial (like) matching by default.
     Returns a list of matching candidate summaries.
     """
     results = await client.search_candidates(
@@ -57,6 +57,17 @@ async def search_candidates(
         state=state,
         limit=limit,
     )
+    return [_summarize_candidate(c) for c in results]
+
+
+@mcp.tool()
+async def list_candidates(limit: int = 25) -> list[dict]:
+    """List candidates without any filters.
+
+    Returns candidates in reverse chronological order.
+    Use search_candidates instead when you need to filter by specific fields.
+    """
+    results = await client.list_candidates(limit=limit)
     return [_summarize_candidate(c) for c in results]
 
 

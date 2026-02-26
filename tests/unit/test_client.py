@@ -87,7 +87,8 @@ class TestSearchCandidates:
         async def mock_get(path, params=None):
             assert "first_name" not in params
             assert "email" not in params
-            assert "per_page" in params
+            # Search endpoint does not accept per_page
+            assert "per_page" not in params
             return {"data": []}
 
         monkeypatch.setattr(client, "get", mock_get)
@@ -120,6 +121,28 @@ class TestSearchCandidates:
         monkeypatch.setattr(client, "get", mock_get)
         results = await client.search_candidates(first_name="nobody")
         assert results == []
+
+
+class TestListCandidates:
+    @pytest.mark.anyio
+    async def test_uses_list_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/candidates"
+            assert "per_page" in params
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_candidates(limit=5)
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_client_side(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"id": i} for i in range(100)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_candidates(limit=3)
+        assert len(results) == 3
 
 
 class TestGetCandidate:
