@@ -65,7 +65,7 @@ make check           # run lint + tests
 | Tool | Description |
 |------|-------------|
 | `ping` | Health check — verify the server is running and API key is configured |
-| `list_candidates` | List candidates in reverse chronological order |
+| `list_candidates` | List candidates (no filters) |
 | `search_candidates` | Search candidates by name, email, country, or state |
 | `get_candidate` | Get full profile details for a candidate by slug/ID |
 | `list_jobs` | List job requisitions, optionally filtered by status |

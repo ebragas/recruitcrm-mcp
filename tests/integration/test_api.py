@@ -73,7 +73,9 @@ class TestSearchCandidates:
         # Get a known first name from the list endpoint
         baseline = await client.list_candidates(limit=1)
         assert len(baseline) > 0
-        target_name = baseline[0]["first_name"]
+        target_name = baseline[0].get("first_name")
+        if not target_name:
+            pytest.skip("First candidate has no first_name")
 
         filtered = await client.search_candidates(
             first_name=target_name, limit=25

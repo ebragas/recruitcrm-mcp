@@ -45,9 +45,8 @@ async def search_candidates(
 ) -> list[dict]:
     """Search for candidates by name, email, country, or state.
 
-    At least one filter must be provided. Filters are combined with AND logic
-    and use partial (like) matching by default.
-    Returns a list of matching candidate summaries.
+    Filters are optional, combined with AND logic, and use partial (LIKE-style)
+    matching by default. Returns an empty list when no filters are provided.
     """
     results = await client.search_candidates(
         first_name=first_name,
@@ -64,7 +63,7 @@ async def search_candidates(
 async def list_candidates(limit: int = 25) -> list[dict]:
     """List candidates without any filters.
 
-    Returns candidates in reverse chronological order.
+    Returns up to ``limit`` candidates in the order provided by the API.
     Use search_candidates instead when you need to filter by specific fields.
     """
     results = await client.list_candidates(limit=limit)
