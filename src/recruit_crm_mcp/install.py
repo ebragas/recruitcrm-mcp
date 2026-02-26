@@ -141,11 +141,6 @@ def write_config(config_path: Path, config: dict) -> None:
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
         f.write("\n")
-    # Restrict permissions so only the owner can read the API key (no-op on Windows).
-    try:
-        config_path.chmod(0o600)
-    except OSError:
-        pass
 
 
 def main() -> None:
