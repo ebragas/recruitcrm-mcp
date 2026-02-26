@@ -8,6 +8,14 @@
 
 set -euo pipefail
 
+# --- Preflight: check required commands ---
+
+if ! command -v curl >/dev/null 2>&1; then
+    echo "Error: 'curl' is required but was not found."
+    echo "Please install curl and re-run this script."
+    exit 1
+fi
+
 echo "========================================================"
 echo "  Recruit CRM MCP — Bootstrap Installer"
 echo "========================================================"

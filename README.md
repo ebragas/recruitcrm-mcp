@@ -14,6 +14,14 @@ Run this in your terminal — it handles everything automatically:
 curl -LsSf https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.sh | bash
 ```
 
+Or download and review the script first:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.sh -o install.sh
+cat install.sh   # review the script
+bash install.sh
+```
+
 The installer will:
 - Install `uv` if you don't have it
 - Prompt for your Recruit CRM API key
