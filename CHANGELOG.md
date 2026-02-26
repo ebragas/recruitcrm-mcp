@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-02-26)
+
+### Features
+
+- Add per-endpoint API docs fetcher replacing monolithic spec
+  ([`98bbc93`](https://github.com/ebragas/recruitcrm-mcp/commit/98bbc93330ed207ed405bebf0ca75a2ed303ee43))
+
+Replace the bash script that downloaded an 850KB monolithic OpenAPI spec with a Python script that
+  fetches individual endpoint, article, and model docs from Stoplight into organized files under
+  docs/recruitcrm/.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Refactoring
+
+- **scripts**: Address PR review on fetch_api_docs
+  ([`117e6ad`](https://github.com/ebragas/recruitcrm-mcp/commit/117e6adbe08bddb8e337638d86665e31943d9b5c))
+
+- Add empty-string fallback in slugify - Filter failed items from _index.json instead of leaving
+  empty paths - Remove unused endpoint_filename function - Replace unreachable return with
+  RuntimeError
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.5.1 (2026-02-26)
 
 ### Bug Fixes
@@ -12,6 +37,11 @@ Claude Desktop doesn't inherit the user's shell PATH, so a bare "uvx" command fa
   absolute path via shutil.which() during installation and write that to the config instead.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.5.1
+  ([`704ac59`](https://github.com/ebragas/recruitcrm-mcp/commit/704ac59143f09b83e57cd4280f4c4e404fff911e))
 
 
 ## v0.5.0 (2026-02-26)
