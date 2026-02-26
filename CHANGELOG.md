@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-02-26)
+
+### Bug Fixes
+
+- **client**: Cap Retry-After at 120s, move imports to module level
+  ([`ae298a3`](https://github.com/ebragas/recruitcrm-mcp/commit/ae298a3b31f329ba5cf8cca2979087605008683e))
+
+- Cap Retry-After header value at 120s to match X-RateLimit-Reset behavior - Move time import to
+  module level in client.py - Move time and logging imports to module level in test_client.py - Add
+  tests for Retry-After cap and X-RateLimit-Reset in the past
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Features
+
+- **client**: Add rate limit handling with retry on 429
+  ([`97ba5af`](https://github.com/ebragas/recruitcrm-mcp/commit/97ba5afd8a30f8ed518b2e5e314fff1db2296312))
+
+Catch 429 responses in client.get(), parse Retry-After / X-RateLimit-Reset headers for wait
+  duration, log a warning, and retry once. If the second attempt also fails, the error is raised to
+  the caller.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.3.0 (2026-02-26)
 
 ### Bug Fixes
@@ -24,6 +49,11 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
   coverage 47% → 92%
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.3.0
+  ([`5160e07`](https://github.com/ebragas/recruitcrm-mcp/commit/5160e075b1787becd09f19ed114e08e6636d2649))
 
 ### Continuous Integration
 
