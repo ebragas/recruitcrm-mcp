@@ -38,21 +38,31 @@ class TestGetApiKey:
 
 class TestSearchCandidates:
     @pytest.mark.anyio
-    async def test_with_query(self, monkeypatch):
+    async def test_always_uses_search_endpoint(self, monkeypatch):
         async def mock_get(path, params=None):
             assert path == "/candidates/search"
-            assert params["search"] == "jane"
             return {"data": [{"first_name": "Jane", "last_name": "Doe"}]}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(query="jane")
+        results = await client.search_candidates()
         assert len(results) == 1
-        assert results[0]["first_name"] == "Jane"
 
     @pytest.mark.anyio
-    async def test_with_email_filter(self, monkeypatch):
+    async def test_passes_name_filters(self, monkeypatch):
         async def mock_get(path, params=None):
-            assert path == "/candidates"
+            assert path == "/candidates/search"
+            assert params["first_name"] == "Jane"
+            assert params["last_name"] == "Doe"
+            return {"data": [{"first_name": "Jane", "last_name": "Doe"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_candidates(first_name="Jane", last_name="Doe")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_passes_email_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/candidates/search"
             assert params["email"] == "jane@example.com"
             return {"data": [{"email": "jane@example.com"}]}
 
@@ -61,12 +71,45 @@ class TestSearchCandidates:
         assert len(results) == 1
 
     @pytest.mark.anyio
+    async def test_passes_location_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/candidates/search"
+            assert params["country"] == "US"
+            assert params["state"] == "California"
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_candidates(country="US", state="California")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_omits_none_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert "first_name" not in params
+            assert "email" not in params
+            assert "per_page" in params
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_candidates()
+        assert results == []
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_client_side(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"id": i} for i in range(100)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_candidates(limit=5)
+        assert len(results) == 5
+
+    @pytest.mark.anyio
     async def test_handles_list_response(self, monkeypatch):
         async def mock_get(path, params=None):
             return [{"first_name": "Jane"}]
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(query="jane")
+        results = await client.search_candidates(first_name="Jane")
         assert len(results) == 1
 
     @pytest.mark.anyio
@@ -75,7 +118,7 @@ class TestSearchCandidates:
             return {"data": []}
 
         monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(query="nobody")
+        results = await client.search_candidates(first_name="nobody")
         assert results == []
 
 

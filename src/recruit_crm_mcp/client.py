@@ -96,33 +96,32 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
 
 
 async def search_candidates(
-    query: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
     email: str | None = None,
-    city: str | None = None,
-    job_title: str | None = None,
-    limit: int = 10,
+    country: str | None = None,
+    state: str | None = None,
+    limit: int = 25,
 ) -> list[dict]:
-    """Search for candidates using available filters.
+    """Search for candidates via the /candidates/search endpoint.
 
-    Note: ``query`` (free-text search) and field filters (email, city,
-    job_title) are mutually exclusive.  When any field filter is provided,
-    ``query`` is ignored and the list endpoint with field filters is used
-    instead of the search endpoint.
+    All filter parameters are optional and combined with AND logic.
+    The API supports like-matching by default; pass ``exact_search=true``
+    in future if exact matching is needed.
     """
     params: dict[str, Any] = {"per_page": limit}
+    if first_name:
+        params["first_name"] = first_name
+    if last_name:
+        params["last_name"] = last_name
     if email:
         params["email"] = email
-    if city:
-        params["city"] = city
-    if job_title:
-        params["job_title"] = job_title
+    if country:
+        params["country"] = country
+    if state:
+        params["state"] = state
 
-    # Use search endpoint for free-text queries, list endpoint for field filters
-    if query and not any([email, city, job_title]):
-        params["search"] = query
-        data = await get("/candidates/search", params)
-    else:
-        data = await get("/candidates", params)
+    data = await get("/candidates/search", params)
 
     # API returns paginated response with "data" key
     if isinstance(data, dict) and "data" in data:
