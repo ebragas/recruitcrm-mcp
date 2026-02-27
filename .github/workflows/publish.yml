@@ -52,4 +52,4 @@ jobs:
         if: steps.semrel.outputs.released == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          dist-path: dist/
+          packages-dir: dist/
