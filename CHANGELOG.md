@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v0.9.0 (2026-03-03)
+
+### Bug Fixes
+
+- Address PR review — test actual tool function via mocked client
+  ([`d8c0dca`](https://github.com/ebragas/recruitcrm-mcp/commit/d8c0dca2a862c7c125c9ac1bb5740d0e6b928d13))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Remove vacuous assertion in test_returns_results
+  ([`8090bd0`](https://github.com/ebragas/recruitcrm-mcp/commit/8090bd08f34dba29efdb8e364ef8f3764a70ec25))
+
+The `assert len(results) > 0` inside `if results:` was always true.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Features
+
+- Main-156 add get_assigned_candidates tool
+  ([`cc9be8a`](https://github.com/ebragas/recruitcrm-mcp/commit/cc9be8a10e1775aec9ceecf2405d01822d3417b9))
+
+Add tool to retrieve candidates assigned to a job with their hiring stage via GET
+  /jobs/{slug}/assigned-candidates. Supports status_id filtering and client-side limit enforcement.
+  Reuses _summarize_candidate for consistent output with search_candidates.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.8.0 (2026-03-03)
 
 ### Bug Fixes
@@ -23,6 +51,11 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
   ([`bfac6ec`](https://github.com/ebragas/recruitcrm-mcp/commit/bfac6ecba603678da29bd4a380db57af39755e12))
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.8.0
+  ([`2801772`](https://github.com/ebragas/recruitcrm-mcp/commit/2801772fbe56e4665c526863807dd7cb8395dbe6))
 
 ### Features
 
