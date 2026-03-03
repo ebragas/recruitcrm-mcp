@@ -1,6 +1,64 @@
 # CHANGELOG
 
 
+## v0.7.0 (2026-03-03)
+
+### Bug Fixes
+
+- Address PR review — fuzzy country assertion and flaky date test
+  ([`2c86a18`](https://github.com/ebragas/recruitcrm-mcp/commit/2c86a18a1594385df65f1a718babb4f0a92beab4))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Address PR review — handle naive/Z timestamps in date tests
+  ([`f90693e`](https://github.com/ebragas/recruitcrm-mcp/commit/f90693e301531ef1cba75f4e7b3c6da2c5348996))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Main-153 replace broken search_candidates query parameters
+  ([`d833ba8`](https://github.com/ebragas/recruitcrm-mcp/commit/d833ba8053b11df33e95eec318fc2d562ff2e3ca))
+
+Replace non-functional query/city/job_title params with first_name/last_name that the
+  /candidates/search endpoint actually supports. Fix email filter to route to /candidates/search
+  instead of /candidates. Remove per_page from search endpoint calls (causes 400). Add default
+  sort_by=updated_at for the no-filter fallback path.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Continuous Integration
+
+- Fix pypi-publish workflow using invalid dist-path input
+  ([`2acc0bc`](https://github.com/ebragas/recruitcrm-mcp/commit/2acc0bc722104bad4e3a95e9ccf80c40cbe1a3cd))
+
+MAIN-89: Replace `dist-path` with `packages-dir` in the pypa/gh-action-pypi-publish
+
+step to eliminate the "Unexpected input" warning on every release run.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Features
+
+- Main-151 add state, country, and date filters to search_candidates
+  ([`eba78e2`](https://github.com/ebragas/recruitcrm-mcp/commit/eba78e24afc1d57bb2fb71e5ac4f2b4f5f27c551))
+
+Add state, country, created_from, created_to, updated_from, updated_to params to search_candidates.
+  Remove sort_by/sort_order which the live API rejects with 422 despite being listed in docs. Fix
+  pre-existing 422 on the /candidates list fallback caused by hardcoded sort defaults.
+
+Add integration tests verifying filter correctness (country, state, date range, combined filters)
+  and rejection guard tests for sort params. Update CLAUDE.md with API gotchas and TDD workflow for
+  new API params.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Testing
+
+- Remove duplicate email filter test
+  ([`37e04c3`](https://github.com/ebragas/recruitcrm-mcp/commit/37e04c323e4fac92b9e825727acdb8375822b034))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.6.2 (2026-02-26)
 
 ### Bug Fixes
@@ -60,6 +118,9 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
   ([`c5e8067`](https://github.com/ebragas/recruitcrm-mcp/commit/c5e8067ffcd1eb8cc84fc833df562167c7cfa005))
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- **release**: 0.6.2
+  ([`6f4f73a`](https://github.com/ebragas/recruitcrm-mcp/commit/6f4f73a25583ad7c23e8663bc1dc1aca7c438d75))
 
 ### Documentation
 

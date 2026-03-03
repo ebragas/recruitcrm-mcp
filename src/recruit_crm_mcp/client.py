@@ -198,8 +198,7 @@ async def search_jobs(
 ) -> list[dict]:
     """Search for jobs via the /jobs/search endpoint.
 
-    At least one filter must be provided — the API returns an empty list
-    when called with no filters.
+    Filters are optional; the API returns an empty list when none are provided.
 
     ``status`` accepts a label string (e.g. 'Open', 'Closed') which is
     mapped to the integer ID the API expects.
