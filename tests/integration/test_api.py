@@ -359,7 +359,6 @@ class TestGetAssignedCandidates:
         for job in jobs:
             results = await client.get_assigned_candidates(job["slug"], limit=5)
             if results:
-                assert len(results) > 0
                 return
         pytest.skip("No jobs with assigned candidates found in first 5 jobs")
 
