@@ -183,7 +183,9 @@ _JOB_LOCATION_LABELS = {"0": "On-site", "1": "Remote", "2": "Hybrid"}
 
 def _job_location_label(value: str | None) -> str:
     """Map job_location_type API values to human-readable labels."""
-    return _JOB_LOCATION_LABELS.get(str(value), value or "")
+    if value is None:
+        return ""
+    return _JOB_LOCATION_LABELS.get(str(value), str(value))
 
 
 def _summarize_job(j: dict) -> dict:
@@ -206,7 +208,6 @@ def _summarize_job(j: dict) -> dict:
         "bill_rate": j.get("bill_rate"),
         "job_category": j.get("job_category"),
         "note_for_candidates": j.get("note_for_candidates"),
-        "job_description_text": j.get("job_description_text"),
         "job_description_file": j.get("job_description_file"),
     }
 

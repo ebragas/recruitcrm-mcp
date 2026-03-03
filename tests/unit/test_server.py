@@ -73,7 +73,6 @@ class TestSummarizeJob:
             "bill_rate": "0",
             "job_category": "Engineering",
             "note_for_candidates": "Great team!",
-            "job_description_text": "<p>Build things</p>",
             "job_description_file": None,
         }
         result = _summarize_job(raw)
@@ -92,7 +91,6 @@ class TestSummarizeJob:
         assert result["bill_rate"] == "0"
         assert result["job_category"] == "Engineering"
         assert result["note_for_candidates"] == "Great team!"
-        assert result["job_description_text"] == "<p>Build things</p>"
         assert result["job_description_file"] is None
 
     def test_no_status(self):

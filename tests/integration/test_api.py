@@ -227,7 +227,6 @@ class TestListJobs:
             "bill_rate",
             "job_category",
             "note_for_candidates",
-            "job_description_text",
             "job_description_file",
         ]:
             assert field in job, f"Expected field {field!r} missing from job record"

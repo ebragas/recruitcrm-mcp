@@ -101,6 +101,15 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
     return resp.json()
 
 
+def _extract_results(data: Any) -> list[dict]:
+    """Normalize API responses into a flat list of records."""
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    if isinstance(data, list):
+        return data
+    return [data] if data else []
+
+
 async def search_candidates(
     first_name: str | None = None,
     last_name: str | None = None,
@@ -143,15 +152,7 @@ async def search_candidates(
     else:
         data = await get("/candidates", {"limit": limit})
 
-    # API returns paginated response with "data" key
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_candidate(candidate_slug: str) -> dict:
@@ -179,15 +180,7 @@ async def list_jobs(limit: int = 20) -> list[dict]:
     client-side.
     """
     data = await get("/jobs", {"per_page": limit})
-
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def search_jobs(
@@ -241,15 +234,7 @@ async def search_jobs(
         params["owner_id"] = owner_id
 
     data = await get("/jobs/search", params)
-
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_job(job_slug: str) -> dict:
@@ -260,6 +245,4 @@ async def get_job(job_slug: str) -> dict:
 async def list_users() -> list[dict]:
     """List all team members/users."""
     data = await get("/users")
-    if isinstance(data, dict) and "data" in data:
-        return data["data"]
-    return data if isinstance(data, list) else []
+    return _extract_results(data)
