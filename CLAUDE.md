@@ -43,7 +43,10 @@ uv run <cmd>     # run commands in the venv
 - Job status → `job_status` object: `{"id": 1, "label": "Open"}`
 - Job description → `job_description_text` (HTML)
 - Pagination: `/candidates` uses `limit` param; `/jobs` uses `per_page` (min 15/page, below minimum is ignored)
-- `/candidates/search` supports: `first_name`, `last_name`, `email`, `linkedin`, `contact_number`, `state`, `country`, `created_from/to`, `updated_from/to`, `sort_by`, `sort_order` — does NOT support `per_page`, `search`, `city`, or `job_title`
+- `/candidates/search` supports: `first_name`, `last_name`, `email`, `linkedin`, `contact_number`, `state`, `country`, `created_from/to`, `updated_from/to` — does NOT support `per_page`, `search`, `city`, `job_title`, `sort_by`, or `sort_order`
+- `/candidates` list endpoint only accepts `limit` — rejects `sort_by`/`sort_order` with 422 (despite docs listing them)
+- **sort_by/sort_order:** The API docs list these as supported on candidate endpoints, but the live API rejects them with 422 on both `/candidates` and `/candidates/search`. Do not add these params without first verifying via integration test.
+- **Country filter uses fuzzy matching:** Searching `country=United States` also returns candidates with `country=United States of America`. State filter uses exact matching.
 - `/jobs/search` rejects `per_page` with 400
 - Search endpoints return `[]` when called with no filter params
 - "Closed" job status has ID `0`, which the API treats as no-filter — closed jobs cannot be filtered via `/jobs/search`
@@ -81,6 +84,15 @@ uv run <cmd>     # run commands in the venv
 5. Check off completed subtasks on the Linear issue description
 6. Use `/commit-commands:commit-push-pr` to commit, push, and open a PR
 7. Transition the Linear issue to "In Review"
+
+### Test-Driven API Development
+
+**Never assume an API parameter works based on documentation alone.** The Recruit CRM API docs have listed parameters that the live API rejects (e.g. `sort_by`/`sort_order`). When adding new API parameters:
+
+1. **Write an integration test first** that calls the live API with the new parameter and asserts expected behavior (correct filtering, field values, status codes).
+2. **Run the integration test** (`make integration-test`) to confirm the API actually accepts the parameter.
+3. **Only then** add the parameter to client/server code and write unit tests.
+4. **Include a "rejection guard" integration test** for params the API is known to reject — these prevent regressions if the API behavior changes later.
 
 ### Linear Integration
 

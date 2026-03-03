@@ -105,6 +105,12 @@ async def search_candidates(
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
     """Search for candidates using available filters.
@@ -119,11 +125,23 @@ async def search_candidates(
         filters["last_name"] = last_name
     if email:
         filters["email"] = email
+    if state:
+        filters["state"] = state
+    if country:
+        filters["country"] = country
+    if created_from:
+        filters["created_from"] = created_from
+    if created_to:
+        filters["created_to"] = created_to
+    if updated_from:
+        filters["updated_from"] = updated_from
+    if updated_to:
+        filters["updated_to"] = updated_to
 
     if filters:
         data = await get("/candidates/search", filters)
     else:
-        data = await get("/candidates", {"limit": limit, "sort_by": "updated_at", "sort_order": "desc"})
+        data = await get("/candidates", {"limit": limit})
 
     # API returns paginated response with "data" key
     if isinstance(data, dict) and "data" in data:

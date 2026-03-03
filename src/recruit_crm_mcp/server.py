@@ -40,16 +40,32 @@ async def search_candidates(
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
-    """Search for candidates by first name, last name, or email.
+    """Search for candidates by name, email, location, or date range.
 
     Provide at least one filter for targeted results. Filters are combined with AND logic.
     With no filters, returns a paginated list of recent candidates.
+    Date params use YYYY-MM-DD format.
     Returns a list of matching candidate summaries.
     """
     results = await client.search_candidates(
-        first_name=first_name, last_name=last_name, email=email, limit=limit
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        state=state,
+        country=country,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        limit=limit,
     )
     return [_summarize_candidate(c) for c in results]
 

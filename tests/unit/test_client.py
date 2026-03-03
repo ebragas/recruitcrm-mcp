@@ -94,12 +94,12 @@ class TestSearchCandidates:
 
     @pytest.mark.anyio
     async def test_no_filters_uses_list_endpoint(self, monkeypatch):
-        """No filters should fall back to /candidates with limit and default sort."""
+        """No filters should fall back to /candidates with limit only."""
         async def mock_get(path, params=None):
             assert path == "/candidates"
             assert "limit" in params
-            assert params["sort_by"] == "updated_at"
-            assert params["sort_order"] == "desc"
+            assert "sort_by" not in params
+            assert "sort_order" not in params
             assert "per_page" not in params
             return {"data": [{"first_name": "Jane"}]}
 
@@ -140,6 +140,38 @@ class TestSearchCandidates:
         monkeypatch.setattr(client, "get", mock_get)
         results = await client.search_candidates(first_name="nobody")
         assert results == []
+
+    @pytest.mark.anyio
+    async def test_state_and_country_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/candidates/search"
+            assert params["state"] == "California"
+            assert params["country"] == "US"
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_candidates(state="California", country="US")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_date_range_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/candidates/search"
+            assert params["created_from"] == "2025-01-01"
+            assert params["created_to"] == "2025-06-30"
+            assert params["updated_from"] == "2025-03-01"
+            assert params["updated_to"] == "2025-06-30"
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_candidates(
+            created_from="2025-01-01",
+            created_to="2025-06-30",
+            updated_from="2025-03-01",
+            updated_to="2025-06-30",
+        )
+        assert len(results) == 1
+
 
 
 class TestGetCandidate:
