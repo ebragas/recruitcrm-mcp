@@ -103,11 +103,11 @@ async def search_jobs(
 ) -> list[dict]:
     """Search for jobs by status, name, location, company, date range, or owner.
 
-    At least one filter must be provided. Filters are combined with AND logic.
+    Filters are optional and combined with AND logic.
     Status accepts a label: 'Open', 'On Hold', 'Closed', 'Placed', 'Canceled', 'Refill'.
     Date params use YYYY-MM-DD format.
     Use list_users to find valid owner_id values.
-    Returns a list of matching job summaries.
+    With no filters, returns an empty list.
     """
     results = await client.search_jobs(
         status=status,

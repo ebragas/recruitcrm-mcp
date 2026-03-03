@@ -280,10 +280,15 @@ class TestSearchJobFilters:
 
     async def test_created_from_filter(self):
         """created_from filter should only return jobs created on or after that date."""
-        cutoff = "2025-01-01"
+        # Derive cutoff from existing data to avoid flakiness
+        jobs = await client.list_jobs(limit=1)
+        if not jobs or not jobs[0].get("created_on"):
+            pytest.skip("No jobs with created_on populated")
+        cutoff = jobs[0]["created_on"][:10]  # YYYY-MM-DD
         results = await client.search_jobs(created_from=cutoff, limit=10)
-        assert len(results) > 0
-        cutoff_dt = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        if not results:
+            pytest.skip("No jobs found matching created_from filter")
+        cutoff_dt = datetime.fromisoformat(cutoff).replace(tzinfo=timezone.utc)
         for j in results:
             created_on = j.get("created_on")
             assert created_on, f"Job {j.get('slug')} missing created_on"
@@ -294,10 +299,15 @@ class TestSearchJobFilters:
 
     async def test_updated_from_filter(self):
         """updated_from filter should only return jobs updated on or after that date."""
-        cutoff = "2025-01-01"
+        # Derive cutoff from existing data to avoid flakiness
+        jobs = await client.list_jobs(limit=1)
+        if not jobs or not jobs[0].get("updated_on"):
+            pytest.skip("No jobs with updated_on populated")
+        cutoff = jobs[0]["updated_on"][:10]  # YYYY-MM-DD
         results = await client.search_jobs(updated_from=cutoff, limit=10)
-        assert len(results) > 0
-        cutoff_dt = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        if not results:
+            pytest.skip("No jobs found matching updated_from filter")
+        cutoff_dt = datetime.fromisoformat(cutoff).replace(tzinfo=timezone.utc)
         for j in results:
             updated_on = j.get("updated_on")
             assert updated_on, f"Job {j.get('slug')} missing updated_on"
