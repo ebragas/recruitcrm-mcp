@@ -1,3 +1,5 @@
+import pytest
+
 from recruit_crm_mcp.server import (
     ping,
     __version__,
@@ -5,6 +7,7 @@ from recruit_crm_mcp.server import (
     _summarize_job,
     _summarize_user,
     _job_location_label,
+    get_assigned_candidates,
 )
 
 
@@ -119,6 +122,65 @@ class TestJobLocationLabel:
 
     def test_none(self):
         assert _job_location_label(None) == ""
+
+
+class TestGetAssignedCandidates:
+    """Test that the get_assigned_candidates tool produces correct summaries."""
+
+    @pytest.mark.anyio
+    async def test_summarizes_candidate_with_hiring_status(self, monkeypatch):
+        """Tool should return candidate summary fields + hiring_status."""
+        mock_data = [
+            {
+                "candidate": {
+                    "slug": "cand-123",
+                    "first_name": "Jane",
+                    "last_name": "Doe",
+                    "email": "jane@example.com",
+                    "position": "Engineer",
+                    "current_organization": "Acme",
+                    "city": "Austin",
+                },
+                "status": {"id": 5, "label": "Interview"},
+            },
+        ]
+
+        async def mock_get_assigned(job_slug, status_id=None, limit=25):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_assigned_candidates", mock_get_assigned)
+
+        results = await get_assigned_candidates("job-123")
+        assert len(results) == 1
+        summary = results[0]
+        assert summary["slug"] == "cand-123"
+        assert summary["name"] == "Jane Doe"
+        assert summary["email"] == "jane@example.com"
+        assert summary["position"] == "Engineer"
+        assert summary["company"] == "Acme"
+        assert summary["city"] == "Austin"
+        assert summary["hiring_status"] == "Interview"
+
+    @pytest.mark.anyio
+    async def test_missing_status_gives_none(self, monkeypatch):
+        """When status is missing, hiring_status should be None."""
+        mock_data = [
+            {
+                "candidate": {"slug": "cand-456", "first_name": "John", "last_name": "Smith"},
+            },
+        ]
+
+        async def mock_get_assigned(job_slug, status_id=None, limit=25):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_assigned_candidates", mock_get_assigned)
+
+        results = await get_assigned_candidates("job-123")
+        assert len(results) == 1
+        assert results[0]["slug"] == "cand-456"
+        assert results[0]["hiring_status"] is None
 
 
 class TestSummarizeUser:

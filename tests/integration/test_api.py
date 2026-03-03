@@ -366,6 +366,53 @@ class TestSearchJobFilters:
         assert exc_info.value.response.status_code == 400
 
 
+class TestGetAssignedCandidates:
+    """Integration tests for GET /jobs/{slug}/assigned-candidates."""
+
+    async def test_returns_results(self):
+        """Find a job with assigned candidates and verify non-empty results."""
+        jobs = await client.list_jobs(limit=5)
+        for job in jobs:
+            results = await client.get_assigned_candidates(job["slug"], limit=5)
+            if results:
+                return
+        pytest.skip("No jobs with assigned candidates found in first 5 jobs")
+
+    async def test_result_has_candidate_and_status(self):
+        """Each result item should have candidate and status keys."""
+        jobs = await client.list_jobs(limit=5)
+        for job in jobs:
+            results = await client.get_assigned_candidates(job["slug"], limit=5)
+            if results:
+                for item in results:
+                    assert "candidate" in item, "Result missing 'candidate' key"
+                    assert "status" in item, "Result missing 'status' key"
+                return
+        pytest.skip("No jobs with assigned candidates found in first 5 jobs")
+
+    async def test_status_id_filter(self):
+        """Filter by a discovered status_id and verify all results match."""
+        jobs = await client.list_jobs(limit=5)
+        for job in jobs:
+            results = await client.get_assigned_candidates(job["slug"], limit=5)
+            if results:
+                # Discover a status_id from the first result
+                status = results[0].get("status", {})
+                sid = status.get("id")
+                if sid is None:
+                    continue
+                filtered = await client.get_assigned_candidates(
+                    job["slug"], status_id=str(sid), limit=25,
+                )
+                assert len(filtered) > 0
+                for item in filtered:
+                    assert item["status"]["id"] == sid, (
+                        f"Expected status_id {sid}, got {item['status']['id']}"
+                    )
+                return
+        pytest.skip("No jobs with assigned candidates and status_id found")
+
+
 class TestListUsers:
     """Integration tests for /users endpoint."""
 

@@ -132,6 +132,31 @@ async def get_job(job_id: str) -> dict:
 
 
 @mcp.tool()
+async def get_assigned_candidates(
+    job_id: str,
+    status_id: str | None = None,
+    limit: int = 25,
+) -> list[dict]:
+    """Get candidates assigned to a specific job and their hiring stage.
+
+    Returns candidate summaries with their current hiring status for the given job.
+    Use status_id to filter by a specific hiring stage.
+    """
+    results = await client.get_assigned_candidates(
+        job_slug=job_id,
+        status_id=status_id,
+        limit=limit,
+    )
+    summaries = []
+    for item in results:
+        summary = _summarize_candidate(item.get("candidate", {}))
+        status = item.get("status") or {}
+        summary["hiring_status"] = status.get("label")
+        summaries.append(summary)
+    return summaries
+
+
+@mcp.tool()
 async def list_users() -> list[dict]:
     """List all team members/users.
 
