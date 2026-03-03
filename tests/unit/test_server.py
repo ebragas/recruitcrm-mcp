@@ -121,6 +121,48 @@ class TestJobLocationLabel:
         assert _job_location_label(None) == ""
 
 
+class TestGetAssignedCandidatesSummarization:
+    """Test that get_assigned_candidates produces correct summaries."""
+
+    def test_summarizes_candidate_with_hiring_status(self):
+        """Candidate fields + hiring_status from status label."""
+        item = {
+            "candidate": {
+                "slug": "cand-123",
+                "first_name": "Jane",
+                "last_name": "Doe",
+                "email": "jane@example.com",
+                "position": "Engineer",
+                "current_organization": "Acme",
+                "city": "Austin",
+            },
+            "status": {"id": 5, "label": "Interview"},
+        }
+        summary = _summarize_candidate(item["candidate"])
+        status = item.get("status") or {}
+        summary["hiring_status"] = status.get("label")
+
+        assert summary["slug"] == "cand-123"
+        assert summary["name"] == "Jane Doe"
+        assert summary["email"] == "jane@example.com"
+        assert summary["position"] == "Engineer"
+        assert summary["company"] == "Acme"
+        assert summary["city"] == "Austin"
+        assert summary["hiring_status"] == "Interview"
+
+    def test_missing_status_gives_none(self):
+        """When status is missing, hiring_status should be None."""
+        item = {
+            "candidate": {"slug": "cand-456", "first_name": "John", "last_name": "Smith"},
+        }
+        summary = _summarize_candidate(item.get("candidate", {}))
+        status = item.get("status") or {}
+        summary["hiring_status"] = status.get("label")
+
+        assert summary["slug"] == "cand-456"
+        assert summary["hiring_status"] is None
+
+
 class TestSummarizeUser:
     def test_basic_fields(self):
         raw = {

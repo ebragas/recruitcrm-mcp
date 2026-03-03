@@ -347,6 +347,44 @@ class TestSearchJobs:
         assert len(results) == 1
 
 
+class TestGetAssignedCandidates:
+    @pytest.mark.anyio
+    async def test_calls_correct_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/job-slug-123/assigned-candidates"
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        await client.get_assigned_candidates("job-slug-123")
+
+    @pytest.mark.anyio
+    async def test_passes_status_id_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert params["status_id"] == "5"
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        await client.get_assigned_candidates("job-slug-123", status_id="5")
+
+    @pytest.mark.anyio
+    async def test_passes_limit(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert params["limit"] == 10
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        await client.get_assigned_candidates("job-slug-123", limit=10)
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_client_side(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"candidate": {"id": i}, "status": {}} for i in range(50)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.get_assigned_candidates("job-slug-123", limit=3)
+        assert len(results) == 3
+
+
 class TestGetJob:
     @pytest.mark.anyio
     async def test_fetches_by_slug(self, monkeypatch):

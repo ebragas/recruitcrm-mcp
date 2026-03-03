@@ -34,6 +34,7 @@ uv run <cmd>     # run commands in the venv
 | `GET /candidates/{slug}` | [Find by slug](https://docs.recruitcrm.io/docs/rcrm-api-reference/6de2e46e80e6a-find-candidate-by-slug) |
 | `GET /jobs` | Jobs list |
 | `GET /jobs/{slug}` | Job by slug |
+| `GET /jobs/{slug}/assigned-candidates` | Candidates assigned to a job |
 | `GET /users` | List team members/users |
 
 ### Field Mapping Gotchas

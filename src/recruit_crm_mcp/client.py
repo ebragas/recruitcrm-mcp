@@ -242,6 +242,22 @@ async def get_job(job_slug: str) -> dict:
     return await get(f"/jobs/{job_slug}")
 
 
+async def get_assigned_candidates(
+    job_slug: str,
+    status_id: str | None = None,
+    limit: int = 25,
+) -> list[dict]:
+    """Get candidates assigned to a job with their hiring stage.
+
+    Returns a list of ``{"candidate": {...}, "status": {...}}`` items.
+    """
+    params: dict[str, Any] = {"limit": limit}
+    if status_id is not None:
+        params["status_id"] = status_id
+    data = await get(f"/jobs/{job_slug}/assigned-candidates", params)
+    return _extract_results(data)[:limit]
+
+
 async def list_users() -> list[dict]:
     """List all team members/users."""
     data = await get("/users")
