@@ -38,17 +38,6 @@ class TestGetApiKey:
 
 class TestSearchCandidates:
     @pytest.mark.anyio
-    async def test_with_email_filter(self, monkeypatch):
-        async def mock_get(path, params=None):
-            assert path == "/candidates/search"
-            assert params["email"] == "jane@example.com"
-            return {"data": [{"email": "jane@example.com"}]}
-
-        monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_candidates(email="jane@example.com")
-        assert len(results) == 1
-
-    @pytest.mark.anyio
     async def test_email_uses_search_endpoint(self, monkeypatch):
         """Email filter should route to /candidates/search, not /candidates."""
         async def mock_get(path, params=None):
