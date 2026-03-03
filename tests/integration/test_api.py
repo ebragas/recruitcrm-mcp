@@ -13,6 +13,14 @@ import pytest
 from recruit_crm_mcp import client
 from recruit_crm_mcp.server import _summarize_candidate, _summarize_job
 
+
+def _parse_dt(value: str) -> datetime:
+    """Parse an ISO timestamp into a timezone-aware UTC datetime."""
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
 pytestmark = [
     pytest.mark.anyio,
     pytest.mark.integration,
@@ -114,7 +122,7 @@ class TestSearchCandidateFilters:
         for r in results:
             created_on = r.get("created_on")
             assert created_on, f"Candidate {r.get('slug')} missing created_on"
-            dt = datetime.fromisoformat(created_on)
+            dt = _parse_dt(created_on)
             assert dt >= cutoff_dt, (
                 f"Candidate created_on {created_on} is before cutoff {cutoff}"
             )
@@ -130,7 +138,7 @@ class TestSearchCandidateFilters:
         for r in results:
             created_on = r.get("created_on")
             assert created_on, f"Candidate {r.get('slug')} missing created_on"
-            dt = datetime.fromisoformat(created_on)
+            dt = _parse_dt(created_on)
             assert dt <= cutoff_dt, (
                 f"Candidate created_on {created_on} is after cutoff {cutoff}"
             )
