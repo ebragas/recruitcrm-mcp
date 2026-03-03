@@ -38,6 +38,16 @@ Process all code review comments on a pull request. For each comment, determine 
      -F in_reply_to={comment_id}
    ```
 
+6. **Re-request review** — after pushing and replying, re-request review from the original reviewers:
+   ```bash
+   # Get the list of reviewers who left comments
+   # Then remove and re-add them to trigger a fresh review
+   gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
+     -X DELETE -f "reviewers[]={reviewer_login}"
+   gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
+     -X POST -f "reviewers[]={reviewer_login}"
+   ```
+
 ## Rules
 
 - Always run tests after applying fixes before committing

@@ -1,11 +1,11 @@
 """HTTP client for the Recruit CRM API."""
 
-import asyncio
 import logging
 import os
 import time
 from typing import Any
 
+import anyio
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
     if resp.status_code == 429:
         wait = _parse_retry_after(resp)
         logger.warning("Rate limited on %s — retrying in %.1fs", path, wait)
-        await asyncio.sleep(wait)
+        await anyio.sleep(wait)
         resp = await client.get(url, **kwargs)
 
     resp.raise_for_status()
@@ -196,6 +196,11 @@ async def search_jobs(
     city: str | None = None,
     country: str | None = None,
     company_name: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
     limit: int = 20,
 ) -> list[dict]:
     """Search for jobs via the /jobs/search endpoint.
@@ -205,6 +210,7 @@ async def search_jobs(
 
     ``status`` accepts a label string (e.g. 'Open', 'Closed') which is
     mapped to the integer ID the API expects.
+    Date params use YYYY-MM-DD format.
     """
     params: dict[str, Any] = {}
     if status:
@@ -223,6 +229,16 @@ async def search_jobs(
         params["country"] = country
     if company_name:
         params["company_name"] = company_name
+    if created_from:
+        params["created_from"] = created_from
+    if created_to:
+        params["created_to"] = created_to
+    if updated_from:
+        params["updated_from"] = updated_from
+    if updated_to:
+        params["updated_to"] = updated_to
+    if owner_id is not None:
+        params["owner_id"] = owner_id
 
     data = await get("/jobs/search", params)
 
@@ -239,3 +255,11 @@ async def search_jobs(
 async def get_job(job_slug: str) -> dict:
     """Get a single job by slug/ID."""
     return await get(f"/jobs/{job_slug}")
+
+
+async def list_users() -> list[dict]:
+    """List all team members/users."""
+    data = await get("/users")
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    return data if isinstance(data, list) else []

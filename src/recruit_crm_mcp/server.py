@@ -94,12 +94,19 @@ async def search_jobs(
     city: str | None = None,
     country: str | None = None,
     company_name: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
     limit: int = 20,
 ) -> list[dict]:
-    """Search for jobs by status, name, city, country, or company.
+    """Search for jobs by status, name, location, company, date range, or owner.
 
     At least one filter must be provided. Filters are combined with AND logic.
     Status accepts a label: 'Open', 'On Hold', 'Closed', 'Placed', 'Canceled', 'Refill'.
+    Date params use YYYY-MM-DD format.
+    Use list_users to find valid owner_id values.
     Returns a list of matching job summaries.
     """
     results = await client.search_jobs(
@@ -108,6 +115,11 @@ async def search_jobs(
         city=city,
         country=country,
         company_name=company_name,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        owner_id=owner_id,
         limit=limit,
     )
     return [_summarize_job(j) for j in results]
@@ -117,6 +129,17 @@ async def search_jobs(
 async def get_job(job_id: str) -> dict:
     """Get full details for a specific job by slug or ID."""
     return await client.get_job(job_id)
+
+
+@mcp.tool()
+async def list_users() -> list[dict]:
+    """List all team members/users.
+
+    Useful for discovering owner IDs to use with the search_jobs owner_id filter.
+    Returns id, name, email, and role for each user.
+    """
+    results = await client.list_users()
+    return [_summarize_user(u) for u in results]
 
 
 @mcp.resource("recruitcrm://candidate/{candidate_id}/resume")
@@ -155,6 +178,14 @@ def _summarize_candidate(c: dict) -> dict:
     }
 
 
+_JOB_LOCATION_LABELS = {"0": "On-site", "1": "Remote", "2": "Hybrid"}
+
+
+def _job_location_label(value: str | None) -> str:
+    """Map job_location_type API values to human-readable labels."""
+    return _JOB_LOCATION_LABELS.get(str(value), value or "")
+
+
 def _summarize_job(j: dict) -> dict:
     """Extract key fields from a job record for concise display."""
     job_status = j.get("job_status")
@@ -165,6 +196,30 @@ def _summarize_job(j: dict) -> dict:
         "status": status_label,
         "city": j.get("city"),
         "country": j.get("country"),
+        "job_type": j.get("job_type"),
+        "job_location_type": _job_location_label(j.get("job_location_type")),
+        "minimum_experience": j.get("minimum_experience"),
+        "maximum_experience": j.get("maximum_experience"),
+        "min_annual_salary": j.get("min_annual_salary"),
+        "max_annual_salary": j.get("max_annual_salary"),
+        "pay_rate": j.get("pay_rate"),
+        "bill_rate": j.get("bill_rate"),
+        "job_category": j.get("job_category"),
+        "note_for_candidates": j.get("note_for_candidates"),
+        "job_description_text": j.get("job_description_text"),
+        "job_description_file": j.get("job_description_file"),
+    }
+
+
+def _summarize_user(u: dict) -> dict:
+    """Extract key fields from a user record for concise display."""
+    first = u.get("first_name", "")
+    last = u.get("last_name", "")
+    return {
+        "id": u.get("id"),
+        "name": f"{first} {last}".strip(),
+        "email": u.get("email"),
+        "role": u.get("role"),
     }
 
 

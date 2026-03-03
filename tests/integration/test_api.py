@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from recruit_crm_mcp import client
-from recruit_crm_mcp.server import _summarize_candidate, _summarize_job
+from recruit_crm_mcp.server import _summarize_candidate, _summarize_job, _summarize_user
 
 pytestmark = [
     pytest.mark.anyio,
@@ -213,6 +213,25 @@ class TestListJobs:
         assert "name" in job
         assert "job_description_text" in job
 
+    async def test_job_response_has_expanded_fields(self):
+        """Job records should contain the expanded response fields."""
+        results = await client.list_jobs(limit=1)
+        job = results[0]
+        for field in [
+            "job_location_type",
+            "minimum_experience",
+            "maximum_experience",
+            "min_annual_salary",
+            "max_annual_salary",
+            "pay_rate",
+            "bill_rate",
+            "job_category",
+            "note_for_candidates",
+            "job_description_text",
+            "job_description_file",
+        ]:
+            assert field in job, f"Expected field {field!r} missing from job record"
+
 
 class TestSearchJobs:
     """Regression tests for MAIN-87: status filter was silently ignored."""
@@ -255,3 +274,90 @@ class TestSearchJobs:
     async def test_search_no_filters_returns_empty(self):
         results = await client.search_jobs()
         assert results == []
+
+
+class TestSearchJobFilters:
+    """Integration tests for /jobs/search date and owner filters."""
+
+    async def test_created_from_filter(self):
+        """created_from filter should only return jobs created on or after that date."""
+        cutoff = "2025-01-01"
+        results = await client.search_jobs(created_from=cutoff, limit=10)
+        assert len(results) > 0
+        cutoff_dt = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        for j in results:
+            created_on = j.get("created_on")
+            assert created_on, f"Job {j.get('slug')} missing created_on"
+            dt = datetime.fromisoformat(created_on)
+            assert dt >= cutoff_dt, (
+                f"Job created_on {created_on} is before cutoff {cutoff}"
+            )
+
+    async def test_updated_from_filter(self):
+        """updated_from filter should only return jobs updated on or after that date."""
+        cutoff = "2025-01-01"
+        results = await client.search_jobs(updated_from=cutoff, limit=10)
+        assert len(results) > 0
+        cutoff_dt = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        for j in results:
+            updated_on = j.get("updated_on")
+            assert updated_on, f"Job {j.get('slug')} missing updated_on"
+            dt = datetime.fromisoformat(updated_on)
+            assert dt >= cutoff_dt, (
+                f"Job updated_on {updated_on} is before cutoff {cutoff}"
+            )
+
+    async def test_owner_id_filter(self):
+        """owner_id filter should only return jobs with matching owner."""
+        # Discover a valid owner ID from existing jobs
+        jobs = await client.list_jobs(limit=5)
+        owner = next((j["owner"] for j in jobs if j.get("owner")), None)
+        if not owner:
+            pytest.skip("No jobs with owner populated")
+
+        results = await client.search_jobs(owner_id=owner, limit=10)
+        assert len(results) > 0
+        for j in results:
+            assert j["owner"] == owner, (
+                f"Expected owner {owner}, got {j['owner']}"
+            )
+
+    async def test_created_on_rejected(self):
+        """The API rejects created_on param with 400."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/jobs/search", {"created_on": "2025-01-01"})
+        assert exc_info.value.response.status_code == 400
+
+    async def test_updated_on_rejected(self):
+        """The API rejects updated_on param with 400."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/jobs/search", {"updated_on": "2025-01-01"})
+        assert exc_info.value.response.status_code == 400
+
+    async def test_owner_rejected(self):
+        """The API rejects owner param (not owner_id) with 400."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/jobs/search", {"owner": 1})
+        assert exc_info.value.response.status_code == 400
+
+
+class TestListUsers:
+    """Integration tests for /users endpoint."""
+
+    async def test_list_returns_users(self):
+        results = await client.list_users()
+        assert len(results) > 0
+
+    async def test_user_has_expected_fields(self):
+        results = await client.list_users()
+        user = results[0]
+        for field in ["id", "first_name", "last_name", "role"]:
+            assert field in user, f"Expected field {field!r} missing from user record"
+
+    async def test_summarize_user_from_live_data(self):
+        results = await client.list_users()
+        summary = _summarize_user(results[0])
+        assert summary["id"] is not None
+        assert summary["name"]
+        # email may be None for some users
+        assert "email" in summary
