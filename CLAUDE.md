@@ -34,6 +34,7 @@ uv run <cmd>     # run commands in the venv
 | `GET /candidates/{slug}` | [Find by slug](https://docs.recruitcrm.io/docs/rcrm-api-reference/6de2e46e80e6a-find-candidate-by-slug) |
 | `GET /jobs` | Jobs list |
 | `GET /jobs/{slug}` | Job by slug |
+| `GET /users` | List team members/users |
 
 ### Field Mapping Gotchas
 
@@ -48,6 +49,10 @@ uv run <cmd>     # run commands in the venv
 - **sort_by/sort_order:** The API docs list these as supported on candidate endpoints, but the live API rejects them with 422 on both `/candidates` and `/candidates/search`. Do not add these params without first verifying via integration test.
 - **Country filter uses fuzzy matching:** Searching `country=United States` also returns candidates with `country=United States of America`. State filter uses exact matching.
 - `/jobs/search` rejects `per_page` with 400
+- `/jobs/search` supports: `created_from`, `created_to`, `updated_from`, `updated_to`, `owner_id` — does NOT accept `created_on`, `updated_on`, or `owner` (400 rejected)
+- Job salary fields use `min_annual_salary`/`max_annual_salary` (not `minimum_`/`maximum_` prefix)
+- `job_location_type` is a string: `"0"`=On-site, `"1"`=Remote, `"2"`=Hybrid
+- `owner` field on jobs is an integer user ID — use `/users` endpoint to resolve to names
 - Search endpoints return `[]` when called with no filter params
 - "Closed" job status has ID `0`, which the API treats as no-filter — closed jobs cannot be filtered via `/jobs/search`
 

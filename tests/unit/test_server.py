@@ -3,6 +3,8 @@ from recruit_crm_mcp.server import (
     __version__,
     _summarize_candidate,
     _summarize_job,
+    _summarize_user,
+    _job_location_label,
 )
 
 
@@ -61,6 +63,17 @@ class TestSummarizeJob:
             "job_status": {"id": 1, "label": "Open"},
             "city": "Austin",
             "country": "US",
+            "job_type": "Full-time",
+            "job_location_type": "1",
+            "minimum_experience": "2",
+            "maximum_experience": "5",
+            "min_annual_salary": "80000",
+            "max_annual_salary": "120000",
+            "pay_rate": "0",
+            "bill_rate": "0",
+            "job_category": "Engineering",
+            "note_for_candidates": "Great team!",
+            "job_description_file": None,
         }
         result = _summarize_job(raw)
         assert result["slug"] == "17648707064020043135awk"
@@ -68,6 +81,17 @@ class TestSummarizeJob:
         assert result["status"] == "Open"
         assert result["city"] == "Austin"
         assert result["country"] == "US"
+        assert result["job_type"] == "Full-time"
+        assert result["job_location_type"] == "Remote"
+        assert result["minimum_experience"] == "2"
+        assert result["maximum_experience"] == "5"
+        assert result["min_annual_salary"] == "80000"
+        assert result["max_annual_salary"] == "120000"
+        assert result["pay_rate"] == "0"
+        assert result["bill_rate"] == "0"
+        assert result["job_category"] == "Engineering"
+        assert result["note_for_candidates"] == "Great team!"
+        assert result["job_description_file"] is None
 
     def test_no_status(self):
         raw = {"slug": "abc", "name": "Designer"}
@@ -77,3 +101,44 @@ class TestSummarizeJob:
         assert result["status"] is None
         assert result["city"] is None
         assert result["country"] is None
+        assert result["job_location_type"] == ""
+
+
+class TestJobLocationLabel:
+    def test_remote(self):
+        assert _job_location_label("1") == "Remote"
+
+    def test_hybrid(self):
+        assert _job_location_label("2") == "Hybrid"
+
+    def test_onsite(self):
+        assert _job_location_label("0") == "On-site"
+
+    def test_unknown_value(self):
+        assert _job_location_label("99") == "99"
+
+    def test_none(self):
+        assert _job_location_label(None) == ""
+
+
+class TestSummarizeUser:
+    def test_basic_fields(self):
+        raw = {
+            "id": 43135,
+            "first_name": "Jane",
+            "last_name": "Doe",
+            "email": "jane@example.com",
+            "role": "Admin",
+        }
+        result = _summarize_user(raw)
+        assert result["id"] == 43135
+        assert result["name"] == "Jane Doe"
+        assert result["email"] == "jane@example.com"
+        assert result["role"] == "Admin"
+
+    def test_empty_record(self):
+        result = _summarize_user({})
+        assert result["id"] is None
+        assert result["name"] == ""
+        assert result["email"] is None
+        assert result["role"] is None

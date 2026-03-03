@@ -1,11 +1,11 @@
 """HTTP client for the Recruit CRM API."""
 
-import asyncio
 import logging
 import os
 import time
 from typing import Any
 
+import anyio
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -94,11 +94,20 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
     if resp.status_code == 429:
         wait = _parse_retry_after(resp)
         logger.warning("Rate limited on %s — retrying in %.1fs", path, wait)
-        await asyncio.sleep(wait)
+        await anyio.sleep(wait)
         resp = await client.get(url, **kwargs)
 
     resp.raise_for_status()
     return resp.json()
+
+
+def _extract_results(data: Any) -> list[dict]:
+    """Normalize API responses into a flat list of records."""
+    if isinstance(data, dict) and "data" in data:
+        return data["data"]
+    if isinstance(data, list):
+        return data
+    return [data] if data else []
 
 
 async def search_candidates(
@@ -143,15 +152,7 @@ async def search_candidates(
     else:
         data = await get("/candidates", {"limit": limit})
 
-    # API returns paginated response with "data" key
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_candidate(candidate_slug: str) -> dict:
@@ -179,15 +180,7 @@ async def list_jobs(limit: int = 20) -> list[dict]:
     client-side.
     """
     data = await get("/jobs", {"per_page": limit})
-
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def search_jobs(
@@ -196,15 +189,20 @@ async def search_jobs(
     city: str | None = None,
     country: str | None = None,
     company_name: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
     limit: int = 20,
 ) -> list[dict]:
     """Search for jobs via the /jobs/search endpoint.
 
-    At least one filter must be provided — the API returns an empty list
-    when called with no filters.
+    Filters are optional; the API returns an empty list when none are provided.
 
     ``status`` accepts a label string (e.g. 'Open', 'Closed') which is
     mapped to the integer ID the API expects.
+    Date params use YYYY-MM-DD format.
     """
     params: dict[str, Any] = {}
     if status:
@@ -223,19 +221,27 @@ async def search_jobs(
         params["country"] = country
     if company_name:
         params["company_name"] = company_name
+    if created_from:
+        params["created_from"] = created_from
+    if created_to:
+        params["created_to"] = created_to
+    if updated_from:
+        params["updated_from"] = updated_from
+    if updated_to:
+        params["updated_to"] = updated_to
+    if owner_id is not None:
+        params["owner_id"] = owner_id
 
     data = await get("/jobs/search", params)
-
-    if isinstance(data, dict) and "data" in data:
-        results = data["data"]
-    elif isinstance(data, list):
-        results = data
-    else:
-        results = [data] if data else []
-
-    return results[:limit]
+    return _extract_results(data)[:limit]
 
 
 async def get_job(job_slug: str) -> dict:
     """Get a single job by slug/ID."""
     return await get(f"/jobs/{job_slug}")
+
+
+async def list_users() -> list[dict]:
+    """List all team members/users."""
+    data = await get("/users")
+    return _extract_results(data)

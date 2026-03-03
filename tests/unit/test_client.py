@@ -259,6 +259,8 @@ class TestSearchJobs:
             assert "job_status" not in params
             assert "name" not in params
             assert "per_page" not in params
+            assert "created_from" not in params
+            assert "owner_id" not in params
             return {"data": []}
 
         monkeypatch.setattr(client, "get", mock_get)
@@ -274,6 +276,76 @@ class TestSearchJobs:
         results = await client.search_jobs(name="x", limit=5)
         assert len(results) == 5
 
+    @pytest.mark.anyio
+    async def test_created_from_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["created_from"] == "2025-01-01"
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(created_from="2025-01-01")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_created_to_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["created_to"] == "2025-12-31"
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(created_to="2025-12-31")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_updated_from_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["updated_from"] == "2025-06-01"
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(updated_from="2025-06-01")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_updated_to_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["updated_to"] == "2025-12-31"
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(updated_to="2025-12-31")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_owner_id_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["owner_id"] == 43135
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(owner_id=43135)
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_date_and_owner_combined(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/jobs/search"
+            assert params["created_from"] == "2025-01-01"
+            assert params["owner_id"] == 43135
+            assert "per_page" not in params
+            return {"data": [{"name": "Engineer"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_jobs(
+            created_from="2025-01-01", owner_id=43135,
+        )
+        assert len(results) == 1
+
 
 class TestGetJob:
     @pytest.mark.anyio
@@ -285,6 +357,40 @@ class TestGetJob:
         monkeypatch.setattr(client, "get", mock_get)
         result = await client.get_job("backend-eng")
         assert result["name"] == "Backend Engineer"
+
+
+class TestListUsers:
+    @pytest.mark.anyio
+    async def test_returns_users_from_data_key(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/users"
+            return {"data": [
+                {"id": 1, "first_name": "Jane", "last_name": "Doe"},
+                {"id": 2, "first_name": "John", "last_name": "Smith"},
+            ]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_users()
+        assert len(results) == 2
+        assert results[0]["first_name"] == "Jane"
+
+    @pytest.mark.anyio
+    async def test_handles_list_response(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return [{"id": 1, "first_name": "Jane"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_users()
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_handles_empty_response(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_users()
+        assert results == []
 
 
 class TestParseRetryAfter:
@@ -336,7 +442,7 @@ class TestRateLimitRetry:
         mock_client.get = AsyncMock(side_effect=[rate_limited, success])
         monkeypatch.setattr(client, "_client", mock_client)
 
-        with patch("recruit_crm_mcp.client.asyncio.sleep") as mock_sleep:
+        with patch("recruit_crm_mcp.client.anyio.sleep") as mock_sleep:
             result = await client.get("/test")
 
         mock_sleep.assert_called_once()
@@ -353,7 +459,7 @@ class TestRateLimitRetry:
         mock_client.get = AsyncMock(side_effect=[rate_limited_1, rate_limited_2])
         monkeypatch.setattr(client, "_client", mock_client)
 
-        with patch("recruit_crm_mcp.client.asyncio.sleep"):
+        with patch("recruit_crm_mcp.client.anyio.sleep"):
             with pytest.raises(httpx.HTTPStatusError):
                 await client.get("/test")
 
@@ -393,7 +499,7 @@ class TestRateLimitRetry:
         mock_client.get = AsyncMock(side_effect=[rate_limited, success])
         monkeypatch.setattr(client, "_client", mock_client)
 
-        with patch("recruit_crm_mcp.client.asyncio.sleep"):
+        with patch("recruit_crm_mcp.client.anyio.sleep"):
             with caplog.at_level(logging.WARNING, logger="recruit_crm_mcp.client"):
                 await client.get("/candidates")
 
