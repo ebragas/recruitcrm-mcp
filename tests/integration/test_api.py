@@ -308,7 +308,7 @@ class TestSearchJobFilters:
         for j in results:
             created_on = j.get("created_on")
             assert created_on, f"Job {j.get('slug')} missing created_on"
-            dt = datetime.fromisoformat(created_on)
+            dt = _parse_dt(created_on)
             assert dt >= cutoff_dt, (
                 f"Job created_on {created_on} is before cutoff {cutoff}"
             )
@@ -327,7 +327,7 @@ class TestSearchJobFilters:
         for j in results:
             updated_on = j.get("updated_on")
             assert updated_on, f"Job {j.get('slug')} missing updated_on"
-            dt = datetime.fromisoformat(updated_on)
+            dt = _parse_dt(updated_on)
             assert dt >= cutoff_dt, (
                 f"Job updated_on {updated_on} is before cutoff {cutoff}"
             )
