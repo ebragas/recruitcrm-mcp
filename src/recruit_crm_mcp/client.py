@@ -102,33 +102,28 @@ async def get(path: str, params: dict[str, Any] | None = None) -> Any:
 
 
 async def search_candidates(
-    query: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
     email: str | None = None,
-    city: str | None = None,
-    job_title: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
     """Search for candidates using available filters.
 
-    Note: ``query`` (free-text search) and field filters (email, city,
-    job_title) are mutually exclusive.  When any field filter is provided,
-    ``query`` is ignored and the list endpoint with field filters is used
-    instead of the search endpoint.
+    When any filter is provided, uses ``/candidates/search``.
+    When no filters are provided, falls back to ``/candidates`` (paginated list).
     """
-    params: dict[str, Any] = {"per_page": limit}
+    filters: dict[str, Any] = {}
+    if first_name:
+        filters["first_name"] = first_name
+    if last_name:
+        filters["last_name"] = last_name
     if email:
-        params["email"] = email
-    if city:
-        params["city"] = city
-    if job_title:
-        params["job_title"] = job_title
+        filters["email"] = email
 
-    # Use search endpoint for free-text queries, list endpoint for field filters
-    if query and not any([email, city, job_title]):
-        params["search"] = query
-        data = await get("/candidates/search", params)
+    if filters:
+        data = await get("/candidates/search", filters)
     else:
-        data = await get("/candidates", params)
+        data = await get("/candidates", {"limit": limit, "sort_by": "updated_at", "sort_order": "desc"})
 
     # API returns paginated response with "data" key
     if isinstance(data, dict) and "data" in data:
@@ -138,7 +133,6 @@ async def search_candidates(
     else:
         results = [data] if data else []
 
-    # API ignores per_page below its minimum (100), so enforce limit client-side
     return results[:limit]
 
 

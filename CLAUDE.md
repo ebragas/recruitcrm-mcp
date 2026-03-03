@@ -42,8 +42,9 @@ uv run <cmd>     # run commands in the venv
 - Candidate resume → object: `{"filename": "...", "file_link": "..."}`
 - Job status → `job_status` object: `{"id": 1, "label": "Open"}`
 - Job description → `job_description_text` (HTML)
-- Pagination: candidates min 100/page, jobs min 15/page — `per_page` below minimums is ignored
-- Search endpoints (`/candidates/search`, `/jobs/search`) reject `per_page` with 400 — use `limit` or omit and enforce client-side
+- Pagination: `/candidates` uses `limit` param; `/jobs` uses `per_page` (min 15/page, below minimum is ignored)
+- `/candidates/search` supports: `first_name`, `last_name`, `email`, `linkedin`, `contact_number`, `state`, `country`, `created_from/to`, `updated_from/to`, `sort_by`, `sort_order` — does NOT support `per_page`, `search`, `city`, or `job_title`
+- `/jobs/search` rejects `per_page` with 400
 - Search endpoints return `[]` when called with no filter params
 - "Closed" job status has ID `0`, which the API treats as no-filter — closed jobs cannot be filtered via `/jobs/search`
 

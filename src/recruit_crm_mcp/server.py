@@ -37,21 +37,19 @@ def ping() -> dict:
 
 @mcp.tool()
 async def search_candidates(
-    query: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
     email: str | None = None,
-    city: str | None = None,
-    job_title: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
-    """Search for candidates by free-text query, email, city, or job title.
+    """Search for candidates by first name, last name, or email.
 
-    Use `query` for general search, or filter by specific fields.
-    `query` and field filters are mutually exclusive — when any field filter
-    is provided, `query` is ignored.
+    Provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent candidates.
     Returns a list of matching candidate summaries.
     """
     results = await client.search_candidates(
-        query=query, email=email, city=city, job_title=job_title, limit=limit
+        first_name=first_name, last_name=last_name, email=email, limit=limit
     )
     return [_summarize_candidate(c) for c in results]
 
