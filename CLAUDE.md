@@ -39,6 +39,12 @@ uv run <cmd>     # run commands in the venv
 | `GET /contacts/search` | Search contacts |
 | `GET /contacts/{slug}` | Contact by slug |
 | `GET /users` | List team members/users |
+| `GET /companies` | Companies list |
+| `GET /companies/search` | Search companies |
+| `GET /companies/{slug}` | Company by slug |
+| `GET /tasks` | Tasks list |
+| `GET /tasks/search` | Search tasks |
+| `GET /tasks/{id}` | Task by ID |
 | `GET /meetings` | Meetings list |
 | `GET /meetings/search` | Search meetings |
 | `GET /meetings/{id}` | Meeting by ID |
@@ -64,6 +70,17 @@ uv run <cmd>     # run commands in the venv
 - `/contacts` list endpoint accepts `limit` param
 - Search endpoints return `[]` when called with no filter params
 - "Closed" job status has ID `0`, which the API treats as no-filter — closed jobs cannot be filtered via `/jobs/search`
+- `/companies/search` supports: `company_name`, `created_from/to`, `updated_from/to`, `owner_id`, `owner_name`, `owner_email`, `sort_by`, `sort_order`, `exact_search`, `marked_as_off_limit`
+- `/companies/search` `sort_by` accepts `createdon` or `updatedon`; `sort_order` accepts `asc` or `desc`
+- `/companies/search` `exact_search` toggles exact vs fuzzy name matching (default is fuzzy/like)
+- `/companies` list endpoint accepts `limit` param
+- `/companies/search` returns `[]` with no filter params
+- Companies are referenced by `slug` — jobs reference companies via `company_slug`
+- Tasks use `id` (integer) not `slug` — `GET /tasks/{id}`
+- `/tasks/search` supports: `title`, `created_from/to`, `updated_from/to`, `starting_from/to`, `owner_id` — does NOT accept `related_to` or `related_to_type` (422 rejected)
+- `/tasks` list endpoint accepts `limit` param
+- `/tasks/search` returns `[]` with no filter params
+- Task `task_type` can be null or an object: `{"id": 1, "label": "Call"}`
 - Meetings use `id` (integer) not `slug` — `GET /meetings/{id}`
 - Meeting `meeting_type` is an object: `{"id": 40014, "label": "Candidate Interview"}`
 - Meeting `status` is an integer (not an object like job_status)

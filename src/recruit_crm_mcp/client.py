@@ -313,6 +313,105 @@ async def get_contact(contact_slug: str) -> dict:
     return await get(f"/contacts/{contact_slug}")
 
 
+async def search_companies(
+    company_name: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
+    sort_by: str | None = None,
+    sort_order: str | None = None,
+    exact_search: bool | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for companies using available filters.
+
+    When any filter is provided, uses ``/companies/search``.
+    When no filters are provided, falls back to ``/companies`` (paginated list).
+    ``sort_by`` accepts ``createdon`` or ``updatedon``.
+    ``sort_order`` accepts ``asc`` or ``desc``.
+    """
+    filters: dict[str, Any] = {}
+    if company_name:
+        filters["company_name"] = company_name
+    if created_from:
+        filters["created_from"] = created_from
+    if created_to:
+        filters["created_to"] = created_to
+    if updated_from:
+        filters["updated_from"] = updated_from
+    if updated_to:
+        filters["updated_to"] = updated_to
+    if owner_id is not None:
+        filters["owner_id"] = owner_id
+    if sort_by:
+        filters["sort_by"] = sort_by
+    if sort_order:
+        filters["sort_order"] = sort_order
+    if exact_search is not None:
+        filters["exact_search"] = "true" if exact_search else "false"
+
+    if filters:
+        data = await get("/companies/search", filters)
+    else:
+        data = await get("/companies", {"limit": limit})
+
+    return _extract_results(data)[:limit]
+
+
+async def get_company(company_slug: str) -> dict:
+    """Get a single company by slug."""
+    return await get(f"/companies/{company_slug}")
+
+
+async def search_tasks(
+    title: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    starting_from: str | None = None,
+    starting_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for tasks using available filters.
+
+    When any filter is provided, uses ``/tasks/search``.
+    When no filters are provided, falls back to ``/tasks`` (paginated list).
+    """
+    filters: dict[str, Any] = {}
+    if title:
+        filters["title"] = title
+    if created_from:
+        filters["created_from"] = created_from
+    if created_to:
+        filters["created_to"] = created_to
+    if updated_from:
+        filters["updated_from"] = updated_from
+    if updated_to:
+        filters["updated_to"] = updated_to
+    if starting_from:
+        filters["starting_from"] = starting_from
+    if starting_to:
+        filters["starting_to"] = starting_to
+    if owner_id is not None:
+        filters["owner_id"] = owner_id
+
+    if filters:
+        data = await get("/tasks/search", filters)
+    else:
+        data = await get("/tasks", {"limit": limit})
+
+    return _extract_results(data)[:limit]
+
+
+async def get_task(task_id: int | str) -> dict:
+    """Get a single task by ID."""
+    return await get(f"/tasks/{task_id}")
+
+
 async def search_meetings(
     title: str | None = None,
     created_from: str | None = None,

@@ -201,6 +201,88 @@ async def search_contacts(
 
 
 @mcp.tool()
+async def get_company(company_slug: str) -> dict:
+    """Get full details for a specific company by slug."""
+    return await client.get_company(company_slug)
+
+
+@mcp.tool()
+async def search_companies(
+    company_name: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
+    sort_by: str | None = None,
+    sort_order: str | None = None,
+    exact_search: bool | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for companies by name, date range, or owner.
+
+    Provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent companies.
+    Date params use YYYY-MM-DD format.
+    sort_by accepts 'createdon' or 'updatedon'. sort_order accepts 'asc' or 'desc'.
+    Set exact_search=True for exact name matching (default is fuzzy/like matching).
+    Use list_users to find valid owner_id values.
+    """
+    results = await client.search_companies(
+        company_name=company_name,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        owner_id=owner_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        exact_search=exact_search,
+        limit=limit,
+    )
+    return [_summarize_company(c) for c in results]
+
+
+@mcp.tool()
+async def get_task(task_id: int) -> dict:
+    """Get full details for a specific task by ID."""
+    return await client.get_task(task_id)
+
+
+@mcp.tool()
+async def search_tasks(
+    title: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    starting_from: str | None = None,
+    starting_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for tasks by title, date range, or owner.
+
+    Provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent tasks.
+    Date params use YYYY-MM-DD format.
+    Use list_users to find valid owner_id values.
+    """
+    results = await client.search_tasks(
+        title=title,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        starting_from=starting_from,
+        starting_to=starting_to,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [_summarize_task(t) for t in results]
+
+
+@mcp.tool()
 async def get_meeting(meeting_id: int) -> dict:
     """Get full details for a specific meeting by ID."""
     return await client.get_meeting(meeting_id)
@@ -272,6 +354,41 @@ async def job_description(job_id: str) -> str:
     description = data.get("job_description_text") or ""
     title = data.get("name") or "Unknown"
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
+
+
+def _summarize_task(t: dict) -> dict:
+    """Extract key fields from a task record for concise display."""
+    task_type = t.get("task_type")
+    type_label = task_type.get("label") if isinstance(task_type, dict) else None
+    return {
+        "id": t.get("id"),
+        "title": t.get("title"),
+        "task_type": type_label,
+        "status": t.get("status"),
+        "start_date": t.get("start_date"),
+        "related_to": t.get("related_to"),
+        "related_to_type": t.get("related_to_type"),
+        "related_to_name": t.get("related_to_name"),
+        "owner": t.get("owner"),
+        "reminder_date": t.get("reminder_date"),
+    }
+
+
+def _summarize_company(c: dict) -> dict:
+    """Extract key fields from a company record for concise display."""
+    return {
+        "slug": c.get("slug"),
+        "company_name": c.get("company_name"),
+        "about_company": c.get("about_company"),
+        "website": c.get("website"),
+        "city": c.get("city"),
+        "state": c.get("state"),
+        "country": c.get("country"),
+        "linkedin": c.get("linkedin"),
+        "industry_id": c.get("industry_id"),
+        "is_parent_company": c.get("is_parent_company"),
+        "is_child_company": c.get("is_child_company"),
+    }
 
 
 def _summarize_meeting(m: dict) -> dict:
