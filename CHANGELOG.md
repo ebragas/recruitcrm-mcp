@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.12.0 (2026-03-04)
+
+### Features
+
+- Add search_notes tool with ID short-circuit
+  ([`a624b27`](https://github.com/ebragas/recruitcrm-mcp/commit/a624b27c787a951a76bd6d21a8cfbfd7642e593f))
+
+Add search_notes MCP tool for searching and listing notes in Recruit CRM. Notes use integer `id`
+  (not `slug`). The API uses `added_from/to` instead of `created_from/to` — the tool maps
+  `created_from/to` params to `added_from/to` internally for a consistent user interface. API
+  rejects related_to, related_to_type (422), and created_from (400).
+
+Includes integration tests (8 raw API probes + 4 client-level), unit tests, client methods
+  (search_notes, get_note), _summarize_note, and CLAUDE.md endpoint/gotcha documentation.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.11.0 (2026-03-04)
 
 ### Bug Fixes
@@ -9,6 +27,11 @@
   ([`1e99bdc`](https://github.com/ebragas/recruitcrm-mcp/commit/1e99bdc3dfbe1363dec1172cea742b9b37d87811))
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.11.0
+  ([`25e2cc3`](https://github.com/ebragas/recruitcrm-mcp/commit/25e2cc369e04a3378ae0726355d394574eb22fbf))
 
 
 ## v0.10.0 (2026-03-04)
