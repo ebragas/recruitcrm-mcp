@@ -49,7 +49,7 @@ Process all code review comments on a pull request. For each comment, determine 
 
    # Always re-request Copilot review (even if it wasn't the only reviewer)
    gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
-     -X POST -f "reviewers[]=copilot-pull-request-reviewer"
+     -X POST -f "reviewers[]=Copilot"
    ```
 
 ## Rules

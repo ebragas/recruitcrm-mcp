@@ -129,7 +129,7 @@ uv run <cmd>     # run commands in the venv
 4. Implement, run `make check` to verify
 5. Check off completed subtasks on the Linear issue description
 6. Use `/commit-commands:commit-push-pr` to commit, push, and open a PR
-7. Request Copilot review: `gh api repos/ebragas/recruitcrm-mcp/pulls/<PR_NUMBER>/requested_reviewers --method POST -f 'reviewers[]=copilot-pull-request-reviewer'`
+7. Request Copilot review: `gh api repos/ebragas/recruitcrm-mcp/pulls/<PR_NUMBER>/requested_reviewers --method POST -f 'reviewers[]=Copilot'`
 8. Transition the Linear issue to "In Review"
 
 ### Test-Driven API Development
