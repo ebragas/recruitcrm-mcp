@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.11.0 (2026-03-04)
+
+### Bug Fixes
+
+- Correct test docstrings for filtered search tests
+  ([`1e99bdc`](https://github.com/ebragas/recruitcrm-mcp/commit/1e99bdc3dfbe1363dec1172cea742b9b37d87811))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.10.0 (2026-03-04)
 
 ### Bug Fixes
@@ -17,6 +27,11 @@ Extract a dedicated get_contact tool so each tool has a consistent return type, 
   established get_*/search_* pattern.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.10.0
+  ([`295204d`](https://github.com/ebragas/recruitcrm-mcp/commit/295204dad5ce92375c8c22e8e747d1a98583f167))
 
 ### Testing
 
@@ -65,6 +80,19 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
 ### Features
 
+- Add search_companies tool with slug short-circuit
+  ([`9568a48`](https://github.com/ebragas/recruitcrm-mcp/commit/9568a48205564f245d26ddad81eafe1de64cca99))
+
+Add search_companies MCP tool for searching and listing companies in Recruit CRM. Companies use slug
+  identifiers. All documented search params verified via integration tests: company_name,
+  created_from/to, updated_from/to, owner_id, sort_by/sort_order, exact_search, marked_as_off_limit,
+  owner_name, owner_email.
+
+Includes integration tests (12 raw API probes + 4 client-level), unit tests, client methods
+  (search_companies, get_company), _summarize_company, and CLAUDE.md endpoint/gotcha documentation.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
 - Add search_contacts tool with slug short-circuit
   ([`d2eabb5`](https://github.com/ebragas/recruitcrm-mcp/commit/d2eabb5796e1758d118ea110449df4d22ad3cae8))
 
@@ -86,6 +114,18 @@ owner_id. API rejects related_to and related_to_type with 422.
 
 Includes integration tests (raw API probes + client-level), unit tests, client methods
   (search_meetings, get_meeting), _summarize_meeting, and CLAUDE.md endpoint/gotcha documentation.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Add search_tasks tool with ID short-circuit
+  ([`8830ded`](https://github.com/ebragas/recruitcrm-mcp/commit/8830ded6f8ed817dc30a2e8b3276f61fecd12097))
+
+Add search_tasks MCP tool for searching and listing tasks in Recruit CRM. Tasks use integer `id`
+  (not `slug`). Supported search params: title, created_from/to, updated_from/to, starting_from/to,
+  owner_id. API rejects related_to and related_to_type with 422 (same as meetings).
+
+Includes integration tests (10 raw API probes + 4 client-level), unit tests, client methods
+  (search_tasks, get_task), _summarize_task, and CLAUDE.md endpoint/gotcha documentation.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
