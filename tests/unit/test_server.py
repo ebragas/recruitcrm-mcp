@@ -206,7 +206,7 @@ class TestGetTaskTool:
 class TestSearchTasksTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
-        """Without filters, should return summarized task list."""
+        """Filtered search should return summarized task list."""
         mock_data = [
             {
                 "id": 12345,
@@ -302,7 +302,7 @@ class TestGetCompanyTool:
 class TestSearchCompaniesTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
-        """Without filters, should return summarized company list."""
+        """Filtered search should return summarized company list."""
         mock_data = [
             {
                 "slug": "acme-corp",
