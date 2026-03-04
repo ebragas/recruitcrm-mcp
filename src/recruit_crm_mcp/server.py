@@ -7,6 +7,17 @@ from importlib.metadata import version, PackageNotFoundError
 from fastmcp import FastMCP
 
 from recruit_crm_mcp import client
+from recruit_crm_mcp.models import (
+    AssignedCandidateSummary,
+    CandidateSummary,
+    CompanySummary,
+    ContactSummary,
+    JobSummary,
+    MeetingSummary,
+    NoteSummary,
+    TaskSummary,
+    UserSummary,
+)
 
 try:
     __version__ = version("recruit-crm-mcp")
@@ -47,7 +58,7 @@ async def search_candidates(
     updated_from: str | None = None,
     updated_to: str | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[CandidateSummary]:
     """Search for candidates by name, email, location, or date range.
 
     Provide at least one filter for targeted results. Filters are combined with AND logic.
@@ -67,7 +78,7 @@ async def search_candidates(
         updated_to=updated_to,
         limit=limit,
     )
-    return [_summarize_candidate(c) for c in results]
+    return [CandidateSummary.from_api_response(c) for c in results]
 
 
 @mcp.tool()
@@ -77,14 +88,14 @@ async def get_candidate(candidate_id: str) -> dict:
 
 
 @mcp.tool()
-async def list_jobs(limit: int = 20) -> list[dict]:
+async def list_jobs(limit: int = 20) -> list[JobSummary]:
     """List job requisitions without any filters.
 
     Returns jobs in reverse chronological order.
     Use search_jobs instead when you need to filter by status or other fields.
     """
     results = await client.list_jobs(limit=limit)
-    return [_summarize_job(j) for j in results]
+    return [JobSummary.from_api_response(j) for j in results]
 
 
 @mcp.tool()
@@ -100,7 +111,7 @@ async def search_jobs(
     updated_to: str | None = None,
     owner_id: int | None = None,
     limit: int = 20,
-) -> list[dict]:
+) -> list[JobSummary]:
     """Search for jobs by status, name, location, company, date range, or owner.
 
     Filters are optional and combined with AND logic.
@@ -122,7 +133,7 @@ async def search_jobs(
         owner_id=owner_id,
         limit=limit,
     )
-    return [_summarize_job(j) for j in results]
+    return [JobSummary.from_api_response(j) for j in results]
 
 
 @mcp.tool()
@@ -136,7 +147,7 @@ async def get_assigned_candidates(
     job_id: str,
     status_id: str | None = None,
     limit: int = 25,
-) -> list[dict]:
+) -> list[AssignedCandidateSummary]:
     """Get candidates assigned to a specific job and their hiring stage.
 
     Returns candidate summaries with their current hiring status for the given job.
@@ -147,13 +158,7 @@ async def get_assigned_candidates(
         status_id=status_id,
         limit=limit,
     )
-    summaries = []
-    for item in results:
-        summary = _summarize_candidate(item.get("candidate", {}))
-        status = item.get("status") or {}
-        summary["hiring_status"] = status.get("label")
-        summaries.append(summary)
-    return summaries
+    return [AssignedCandidateSummary.from_api_response(item) for item in results]
 
 
 @mcp.tool()
@@ -176,7 +181,7 @@ async def search_contacts(
     updated_to: str | None = None,
     owner_id: int | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[ContactSummary]:
     """Search for contacts by name, email, company, or date range.
 
     Provide at least one filter for targeted results. Filters are combined with AND logic.
@@ -197,7 +202,7 @@ async def search_contacts(
         owner_id=owner_id,
         limit=limit,
     )
-    return [_summarize_contact(c) for c in results]
+    return [ContactSummary.from_api_response(c) for c in results]
 
 
 @mcp.tool()
@@ -218,7 +223,7 @@ async def search_companies(
     sort_order: str | None = None,
     exact_search: bool | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[CompanySummary]:
     """Search for companies by name, date range, or owner.
 
     Provide at least one filter for targeted results. Filters are combined with AND logic.
@@ -240,7 +245,7 @@ async def search_companies(
         exact_search=exact_search,
         limit=limit,
     )
-    return [_summarize_company(c) for c in results]
+    return [CompanySummary.from_api_response(c) for c in results]
 
 
 @mcp.tool()
@@ -256,7 +261,7 @@ async def search_notes(
     updated_from: str | None = None,
     updated_to: str | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[NoteSummary]:
     """Search for notes by date range.
 
     Provide at least one filter for targeted results. Filters are combined with AND logic.
@@ -270,7 +275,7 @@ async def search_notes(
         updated_to=updated_to,
         limit=limit,
     )
-    return [_summarize_note(n) for n in results]
+    return [NoteSummary.from_api_response(n) for n in results]
 
 
 @mcp.tool()
@@ -290,7 +295,7 @@ async def search_tasks(
     starting_to: str | None = None,
     owner_id: int | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[TaskSummary]:
     """Search for tasks by title, date range, or owner.
 
     Provide at least one filter for targeted results. Filters are combined with AND logic.
@@ -309,7 +314,7 @@ async def search_tasks(
         owner_id=owner_id,
         limit=limit,
     )
-    return [_summarize_task(t) for t in results]
+    return [TaskSummary.from_api_response(t) for t in results]
 
 
 @mcp.tool()
@@ -329,7 +334,7 @@ async def search_meetings(
     starting_to: str | None = None,
     owner_id: int | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[MeetingSummary]:
     """Search for meetings by title, date range, or owner.
 
     Provide at least one filter for targeted results. Filters are combined with AND logic.
@@ -348,18 +353,18 @@ async def search_meetings(
         owner_id=owner_id,
         limit=limit,
     )
-    return [_summarize_meeting(m) for m in results]
+    return [MeetingSummary.from_api_response(m) for m in results]
 
 
 @mcp.tool()
-async def list_users() -> list[dict]:
+async def list_users() -> list[UserSummary]:
     """List all team members/users.
 
     Useful for discovering owner IDs to use with the search_jobs owner_id filter.
     Returns id, name, email, and role for each user.
     """
     results = await client.list_users()
-    return [_summarize_user(u) for u in results]
+    return [UserSummary.from_api_response(u) for u in results]
 
 
 @mcp.resource("recruitcrm://candidate/{candidate_id}/resume")
@@ -384,149 +389,6 @@ async def job_description(job_id: str) -> str:
     description = data.get("job_description_text") or ""
     title = data.get("name") or "Unknown"
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
-
-
-def _summarize_note(n: dict) -> dict:
-    """Extract key fields from a note record for concise display."""
-    note_type = n.get("note_type")
-    type_label = note_type.get("label") if isinstance(note_type, dict) else None
-    return {
-        "id": n.get("id"),
-        "note_type": type_label,
-        "description": n.get("description"),
-        "related_to": n.get("related_to"),
-        "related_to_type": n.get("related_to_type"),
-        "created_on": n.get("created_on"),
-        "updated_on": n.get("updated_on"),
-    }
-
-
-def _summarize_task(t: dict) -> dict:
-    """Extract key fields from a task record for concise display."""
-    task_type = t.get("task_type")
-    type_label = task_type.get("label") if isinstance(task_type, dict) else None
-    return {
-        "id": t.get("id"),
-        "title": t.get("title"),
-        "task_type": type_label,
-        "status": t.get("status"),
-        "start_date": t.get("start_date"),
-        "related_to": t.get("related_to"),
-        "related_to_type": t.get("related_to_type"),
-        "related_to_name": t.get("related_to_name"),
-        "owner": t.get("owner"),
-        "reminder_date": t.get("reminder_date"),
-    }
-
-
-def _summarize_company(c: dict) -> dict:
-    """Extract key fields from a company record for concise display."""
-    return {
-        "slug": c.get("slug"),
-        "company_name": c.get("company_name"),
-        "about_company": c.get("about_company"),
-        "website": c.get("website"),
-        "city": c.get("city"),
-        "state": c.get("state"),
-        "country": c.get("country"),
-        "linkedin": c.get("linkedin"),
-        "industry_id": c.get("industry_id"),
-        "is_parent_company": c.get("is_parent_company"),
-        "is_child_company": c.get("is_child_company"),
-    }
-
-
-def _summarize_meeting(m: dict) -> dict:
-    """Extract key fields from a meeting record for concise display."""
-    meeting_type = m.get("meeting_type")
-    type_label = meeting_type.get("label") if isinstance(meeting_type, dict) else None
-    return {
-        "id": m.get("id"),
-        "title": m.get("title"),
-        "meeting_type": type_label,
-        "status": m.get("status"),
-        "start_date": m.get("start_date"),
-        "end_date": m.get("end_date"),
-        "all_day": m.get("all_day"),
-        "address": m.get("address"),
-        "related_to": m.get("related_to"),
-        "related_to_type": m.get("related_to_type"),
-        "owner": m.get("owner"),
-    }
-
-
-def _summarize_contact(c: dict) -> dict:
-    """Extract key fields from a contact record for concise display."""
-    return {
-        "slug": c.get("slug"),
-        "name": f"{c.get('first_name') or ''} {c.get('last_name') or ''}".strip(),
-        "email": c.get("email"),
-        "contact_number": c.get("contact_number"),
-        "designation": c.get("designation"),
-        "company_slug": c.get("company_slug"),
-        "city": c.get("city"),
-        "state": c.get("state"),
-        "country": c.get("country"),
-        "linkedin": c.get("linkedin"),
-    }
-
-
-def _summarize_candidate(c: dict) -> dict:
-    """Extract key fields from a candidate record for concise display."""
-    return {
-        "slug": c.get("slug"),
-        "name": f"{c.get('first_name') or ''} {c.get('last_name') or ''}".strip(),
-        "email": c.get("email"),
-        "position": c.get("position"),
-        "company": c.get("current_organization"),
-        "city": c.get("city"),
-    }
-
-
-_JOB_LOCATION_LABELS = {"0": "On-site", "1": "Remote", "2": "Hybrid"}
-
-
-def _job_location_label(value: str | None) -> str:
-    """Map job_location_type API values to human-readable labels."""
-    if value is None:
-        return ""
-    return _JOB_LOCATION_LABELS.get(str(value), str(value))
-
-
-def _summarize_job(j: dict) -> dict:
-    """Extract key fields from a job record for concise display."""
-    job_status = j.get("job_status")
-    status_label = job_status.get("label") if isinstance(job_status, dict) else None
-    return {
-        "slug": j.get("slug"),
-        "name": j.get("name"),
-        "status": status_label,
-        "city": j.get("city"),
-        "country": j.get("country"),
-        "job_type": j.get("job_type"),
-        "job_location_type": _job_location_label(j.get("job_location_type")),
-        "minimum_experience": j.get("minimum_experience"),
-        "maximum_experience": j.get("maximum_experience"),
-        "min_annual_salary": j.get("min_annual_salary"),
-        "max_annual_salary": j.get("max_annual_salary"),
-        "pay_rate": j.get("pay_rate"),
-        "bill_rate": j.get("bill_rate"),
-        "job_category": j.get("job_category"),
-        "note_for_candidates": j.get("note_for_candidates"),
-        "job_description_file": j.get("job_description_file"),
-    }
-
-
-def _summarize_user(u: dict) -> dict:
-    """Extract key fields from a user record for concise display."""
-    first = u.get("first_name") or ""
-    last = u.get("last_name") or ""
-    return {
-        "id": u.get("id"),
-        "name": f"{first} {last}".strip(),
-        "email": u.get("email"),
-        "role": u.get("role"),
-    }
 
 
 def main():
