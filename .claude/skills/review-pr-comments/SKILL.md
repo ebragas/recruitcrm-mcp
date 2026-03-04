@@ -38,7 +38,7 @@ Process all code review comments on a pull request. For each comment, determine 
      -F in_reply_to={comment_id}
    ```
 
-6. **Re-request review** — after pushing and replying, re-request review from the original reviewers:
+6. **Re-request review** — after pushing and replying, re-request review from all original reviewers plus Copilot:
    ```bash
    # Get the list of reviewers who left comments
    # Then remove and re-add them to trigger a fresh review
@@ -46,6 +46,10 @@ Process all code review comments on a pull request. For each comment, determine 
      -X DELETE -f "reviewers[]={reviewer_login}"
    gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
      -X POST -f "reviewers[]={reviewer_login}"
+
+   # Always re-request Copilot review (even if it wasn't the only reviewer)
+   gh api repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
+     -X POST -f "reviewers[]=copilot-pull-request-reviewer"
    ```
 
 ## Rules
