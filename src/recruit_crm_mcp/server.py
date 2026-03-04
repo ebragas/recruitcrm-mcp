@@ -157,6 +157,89 @@ async def get_assigned_candidates(
 
 
 @mcp.tool()
+async def get_contact(contact_slug: str) -> dict:
+    """Get full details for a specific contact by slug."""
+    return await client.get_contact(contact_slug)
+
+
+@mcp.tool()
+async def search_contacts(
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    linkedin: str | None = None,
+    contact_number: str | None = None,
+    company_slug: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for contacts by name, email, company, or date range.
+
+    Provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent contacts.
+    Date params use YYYY-MM-DD format.
+    """
+    results = await client.search_contacts(
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        linkedin=linkedin,
+        contact_number=contact_number,
+        company_slug=company_slug,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [_summarize_contact(c) for c in results]
+
+
+@mcp.tool()
+async def get_meeting(meeting_id: int) -> dict:
+    """Get full details for a specific meeting by ID."""
+    return await client.get_meeting(meeting_id)
+
+
+@mcp.tool()
+async def search_meetings(
+    title: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    starting_from: str | None = None,
+    starting_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for meetings by title, date range, or owner.
+
+    Provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent meetings.
+    Date params use YYYY-MM-DD format.
+    Use list_users to find valid owner_id values.
+    """
+    results = await client.search_meetings(
+        title=title,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        starting_from=starting_from,
+        starting_to=starting_to,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [_summarize_meeting(m) for m in results]
+
+
+@mcp.tool()
 async def list_users() -> list[dict]:
     """List all team members/users.
 
@@ -191,11 +274,46 @@ async def job_description(job_id: str) -> str:
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
 
 
+def _summarize_meeting(m: dict) -> dict:
+    """Extract key fields from a meeting record for concise display."""
+    meeting_type = m.get("meeting_type")
+    type_label = meeting_type.get("label") if isinstance(meeting_type, dict) else None
+    return {
+        "id": m.get("id"),
+        "title": m.get("title"),
+        "meeting_type": type_label,
+        "status": m.get("status"),
+        "start_date": m.get("start_date"),
+        "end_date": m.get("end_date"),
+        "all_day": m.get("all_day"),
+        "address": m.get("address"),
+        "related_to": m.get("related_to"),
+        "related_to_type": m.get("related_to_type"),
+        "owner": m.get("owner"),
+    }
+
+
+def _summarize_contact(c: dict) -> dict:
+    """Extract key fields from a contact record for concise display."""
+    return {
+        "slug": c.get("slug"),
+        "name": f"{c.get('first_name') or ''} {c.get('last_name') or ''}".strip(),
+        "email": c.get("email"),
+        "contact_number": c.get("contact_number"),
+        "designation": c.get("designation"),
+        "company_slug": c.get("company_slug"),
+        "city": c.get("city"),
+        "state": c.get("state"),
+        "country": c.get("country"),
+        "linkedin": c.get("linkedin"),
+    }
+
+
 def _summarize_candidate(c: dict) -> dict:
     """Extract key fields from a candidate record for concise display."""
     return {
         "slug": c.get("slug"),
-        "name": f"{c.get('first_name', '')} {c.get('last_name', '')}".strip(),
+        "name": f"{c.get('first_name') or ''} {c.get('last_name') or ''}".strip(),
         "email": c.get("email"),
         "position": c.get("position"),
         "company": c.get("current_organization"),
@@ -239,8 +357,8 @@ def _summarize_job(j: dict) -> dict:
 
 def _summarize_user(u: dict) -> dict:
     """Extract key fields from a user record for concise display."""
-    first = u.get("first_name", "")
-    last = u.get("last_name", "")
+    first = u.get("first_name") or ""
+    last = u.get("last_name") or ""
     return {
         "id": u.get("id"),
         "name": f"{first} {last}".strip(),

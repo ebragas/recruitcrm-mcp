@@ -257,6 +257,109 @@ async def get_assigned_candidates(
     return _extract_results(data)[:limit]
 
 
+async def search_contacts(
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    linkedin: str | None = None,
+    contact_number: str | None = None,
+    company_slug: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for contacts using available filters.
+
+    When any filter is provided, uses ``/contacts/search``.
+    When no filters are provided, falls back to ``/contacts`` (paginated list).
+    """
+    filters: dict[str, Any] = {}
+    if first_name:
+        filters["first_name"] = first_name
+    if last_name:
+        filters["last_name"] = last_name
+    if email:
+        filters["email"] = email
+    if linkedin:
+        filters["linkedin"] = linkedin
+    if contact_number:
+        filters["contact_number"] = contact_number
+    if company_slug:
+        filters["company_slug"] = company_slug
+    if created_from:
+        filters["created_from"] = created_from
+    if created_to:
+        filters["created_to"] = created_to
+    if updated_from:
+        filters["updated_from"] = updated_from
+    if updated_to:
+        filters["updated_to"] = updated_to
+    if owner_id is not None:
+        filters["owner_id"] = owner_id
+
+    if filters:
+        data = await get("/contacts/search", filters)
+    else:
+        data = await get("/contacts", {"limit": limit})
+
+    return _extract_results(data)[:limit]
+
+
+async def get_contact(contact_slug: str) -> dict:
+    """Get a single contact by slug/ID."""
+    return await get(f"/contacts/{contact_slug}")
+
+
+async def search_meetings(
+    title: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    starting_from: str | None = None,
+    starting_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for meetings using available filters.
+
+    When any filter is provided, uses ``/meetings/search``.
+    When no filters are provided, falls back to ``/meetings`` (paginated list).
+    """
+    filters: dict[str, Any] = {}
+    if title:
+        filters["title"] = title
+    if created_from:
+        filters["created_from"] = created_from
+    if created_to:
+        filters["created_to"] = created_to
+    if updated_from:
+        filters["updated_from"] = updated_from
+    if updated_to:
+        filters["updated_to"] = updated_to
+    if starting_from:
+        filters["starting_from"] = starting_from
+    if starting_to:
+        filters["starting_to"] = starting_to
+    if owner_id is not None:
+        filters["owner_id"] = owner_id
+
+    if filters:
+        data = await get("/meetings/search", filters)
+    else:
+        data = await get("/meetings", {"limit": limit})
+
+    return _extract_results(data)[:limit]
+
+
+async def get_meeting(meeting_id: int | str) -> dict:
+    """Get a single meeting by ID."""
+    return await get(f"/meetings/{meeting_id}")
+
+
 async def list_users() -> list[dict]:
     """List all team members/users."""
     data = await get("/users")

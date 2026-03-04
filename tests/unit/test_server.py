@@ -4,10 +4,16 @@ from recruit_crm_mcp.server import (
     ping,
     __version__,
     _summarize_candidate,
+    _summarize_contact,
     _summarize_job,
+    _summarize_meeting,
     _summarize_user,
     _job_location_label,
     get_assigned_candidates,
+    get_contact,
+    get_meeting,
+    search_contacts,
+    search_meetings,
 )
 
 
@@ -27,6 +33,200 @@ def test_ping_reports_api_key_configured(monkeypatch):
     monkeypatch.setenv("RECRUIT_CRM_API_KEY", "test-key")
     result = ping()
     assert result["api_configured"] is True
+
+
+class TestSummarizeContact:
+    def test_basic_fields(self):
+        raw = {
+            "slug": "contact-123",
+            "first_name": "Jane",
+            "last_name": "Doe",
+            "email": "jane@example.com",
+            "contact_number": "+1234567890",
+            "designation": "VP Sales",
+            "company_slug": "acme-corp",
+            "city": "Austin",
+            "state": "Texas",
+            "country": "United States",
+            "linkedin": "https://linkedin.com/in/janedoe",
+        }
+        result = _summarize_contact(raw)
+        assert result["slug"] == "contact-123"
+        assert result["name"] == "Jane Doe"
+        assert result["email"] == "jane@example.com"
+        assert result["contact_number"] == "+1234567890"
+        assert result["designation"] == "VP Sales"
+        assert result["company_slug"] == "acme-corp"
+        assert result["city"] == "Austin"
+        assert result["state"] == "Texas"
+        assert result["country"] == "United States"
+        assert result["linkedin"] == "https://linkedin.com/in/janedoe"
+
+    def test_empty_record(self):
+        result = _summarize_contact({})
+        assert result["slug"] is None
+        assert result["name"] == ""
+        assert result["email"] is None
+        assert result["contact_number"] is None
+        assert result["designation"] is None
+        assert result["company_slug"] is None
+        assert result["city"] is None
+        assert result["state"] is None
+        assert result["country"] is None
+        assert result["linkedin"] is None
+
+
+class TestGetContactTool:
+    @pytest.mark.anyio
+    async def test_returns_full_record(self, monkeypatch):
+        """get_contact should return the full raw contact record."""
+        raw_contact = {
+            "slug": "contact-123",
+            "first_name": "Jane",
+            "last_name": "Doe",
+            "email": "jane@example.com",
+        }
+
+        async def mock_get_contact(slug):
+            assert slug == "contact-123"
+            return raw_contact
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_contact", mock_get_contact)
+
+        result = await get_contact("contact-123")
+        assert result == raw_contact
+
+
+class TestSearchContactsTool:
+    @pytest.mark.anyio
+    async def test_returns_summarized_list(self, monkeypatch):
+        """Without contact_slug, should return summarized contact list."""
+        mock_data = [
+            {
+                "slug": "contact-123",
+                "first_name": "Jane",
+                "last_name": "Doe",
+                "email": "jane@example.com",
+                "contact_number": "+1234567890",
+                "designation": "VP Sales",
+                "company_slug": "acme-corp",
+                "city": "Austin",
+                "state": "Texas",
+                "country": "US",
+                "linkedin": None,
+            },
+        ]
+
+        async def mock_search(**kwargs):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "search_contacts", mock_search)
+
+        results = await search_contacts(email="jane@example.com")
+        assert len(results) == 1
+        assert results[0]["slug"] == "contact-123"
+        assert results[0]["name"] == "Jane Doe"
+        assert results[0]["designation"] == "VP Sales"
+
+
+class TestSummarizeMeeting:
+    def test_basic_fields(self):
+        raw = {
+            "id": 37639022,
+            "title": "Interview with Jane",
+            "meeting_type": {"id": 40014, "label": "Candidate Interview"},
+            "status": 0,
+            "start_date": "2025-04-29T18:30:00.000000Z",
+            "end_date": "2025-04-29T19:00:00.000000Z",
+            "all_day": 0,
+            "address": "123 Main St",
+            "related_to": "cand-slug-123",
+            "related_to_type": "candidate",
+            "owner": 31585,
+        }
+        result = _summarize_meeting(raw)
+        assert result["id"] == 37639022
+        assert result["title"] == "Interview with Jane"
+        assert result["meeting_type"] == "Candidate Interview"
+        assert result["status"] == 0
+        assert result["start_date"] == "2025-04-29T18:30:00.000000Z"
+        assert result["end_date"] == "2025-04-29T19:00:00.000000Z"
+        assert result["all_day"] == 0
+        assert result["address"] == "123 Main St"
+        assert result["related_to"] == "cand-slug-123"
+        assert result["related_to_type"] == "candidate"
+        assert result["owner"] == 31585
+
+    def test_empty_record(self):
+        result = _summarize_meeting({})
+        assert result["id"] is None
+        assert result["title"] is None
+        assert result["meeting_type"] is None
+        assert result["status"] is None
+        assert result["start_date"] is None
+        assert result["end_date"] is None
+        assert result["all_day"] is None
+        assert result["address"] is None
+        assert result["related_to"] is None
+        assert result["related_to_type"] is None
+        assert result["owner"] is None
+
+
+class TestGetMeetingTool:
+    @pytest.mark.anyio
+    async def test_returns_full_record(self, monkeypatch):
+        """get_meeting should return the full raw meeting record."""
+        raw_meeting = {
+            "id": 12345,
+            "title": "Interview",
+            "meeting_type": {"id": 1, "label": "Interview"},
+            "status": 0,
+        }
+
+        async def mock_get_meeting(meeting_id):
+            assert meeting_id == 12345
+            return raw_meeting
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_meeting", mock_get_meeting)
+
+        result = await get_meeting(12345)
+        assert result == raw_meeting
+
+
+class TestSearchMeetingsTool:
+    @pytest.mark.anyio
+    async def test_returns_summarized_list(self, monkeypatch):
+        """Without meeting_id, should return summarized meeting list."""
+        mock_data = [
+            {
+                "id": 12345,
+                "title": "Interview",
+                "meeting_type": {"id": 1, "label": "Phone Screen"},
+                "status": 0,
+                "start_date": "2025-04-29T18:30:00.000000Z",
+                "end_date": "2025-04-29T19:00:00.000000Z",
+                "all_day": 0,
+                "address": "Zoom",
+                "related_to": "cand-123",
+                "related_to_type": "candidate",
+                "owner": 31585,
+            },
+        ]
+
+        async def mock_search(**kwargs):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "search_meetings", mock_search)
+
+        results = await search_meetings(title="Interview")
+        assert len(results) == 1
+        assert results[0]["id"] == 12345
+        assert results[0]["title"] == "Interview"
+        assert results[0]["meeting_type"] == "Phone Screen"
 
 
 class TestSummarizeCandidate:
