@@ -200,6 +200,44 @@ async def search_contacts(
 
 
 @mcp.tool()
+async def search_meetings(
+    meeting_id: int | None = None,
+    title: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    starting_from: str | None = None,
+    starting_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict] | dict:
+    """Search for meetings by title, date range, or owner.
+
+    If meeting_id is provided, returns the full raw meeting record (short-circuits search).
+    Otherwise, provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent meetings.
+    Date params use YYYY-MM-DD format.
+    Use list_users to find valid owner_id values.
+    """
+    if meeting_id is not None:
+        return await client.get_meeting(meeting_id)
+
+    results = await client.search_meetings(
+        title=title,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        starting_from=starting_from,
+        starting_to=starting_to,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [_summarize_meeting(m) for m in results]
+
+
+@mcp.tool()
 async def list_users() -> list[dict]:
     """List all team members/users.
 
@@ -232,6 +270,25 @@ async def job_description(job_id: str) -> str:
     description = data.get("job_description_text") or ""
     title = data.get("name") or "Unknown"
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
+
+
+def _summarize_meeting(m: dict) -> dict:
+    """Extract key fields from a meeting record for concise display."""
+    meeting_type = m.get("meeting_type")
+    type_label = meeting_type.get("label") if isinstance(meeting_type, dict) else None
+    return {
+        "id": m.get("id"),
+        "title": m.get("title"),
+        "meeting_type": type_label,
+        "status": m.get("status"),
+        "start_date": m.get("start_date"),
+        "end_date": m.get("end_date"),
+        "all_day": m.get("all_day"),
+        "address": m.get("address"),
+        "related_to": m.get("related_to"),
+        "related_to_type": m.get("related_to_type"),
+        "owner": m.get("owner"),
+    }
 
 
 def _summarize_contact(c: dict) -> dict:

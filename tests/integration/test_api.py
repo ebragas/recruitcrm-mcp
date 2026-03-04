@@ -15,6 +15,7 @@ from recruit_crm_mcp.server import (
     _summarize_candidate,
     _summarize_contact,
     _summarize_job,
+    _summarize_meeting,
     _summarize_user,
 )
 
@@ -582,3 +583,144 @@ class TestSearchContacts:
         summary = _summarize_contact(results[0])
         assert summary["slug"] is not None
         assert summary["name"]
+
+
+class TestMeetings:
+    """Raw API probes for meetings endpoints."""
+
+    _cached_meetings: list[dict] | None = None
+
+    async def _get_meetings(self) -> list[dict]:
+        if TestMeetings._cached_meetings is None:
+            data = await client.get("/meetings/search", {"starting_from": "2020-01-01"})
+            TestMeetings._cached_meetings = client._extract_results(data)
+        return TestMeetings._cached_meetings
+
+    async def test_search_no_filters_returns_empty(self):
+        """/meetings/search with no params returns []."""
+        data = await client.get("/meetings/search")
+        results = client._extract_results(data)
+        assert results == []
+
+    async def test_list_endpoint_exists(self):
+        """GET /meetings with limit returns results."""
+        data = await client.get("/meetings", {"limit": 3})
+        results = client._extract_results(data)
+        assert isinstance(results, list)
+        assert len(results) > 0
+
+    async def test_meeting_has_expected_fields(self):
+        """Verify field names from a meeting record.
+
+        Note: meetings use 'id' (integer) not 'slug'.
+        """
+        meetings = await self._get_meetings()
+        if not meetings:
+            pytest.skip("No meetings found")
+        meeting = meetings[0]
+        for field in [
+            "id", "title", "meeting_type", "status",
+            "start_date", "end_date", "all_day", "address",
+            "related_to", "related_to_type", "owner",
+        ]:
+            assert field in meeting, f"Expected field {field!r} missing from meeting"
+
+    async def test_get_meeting_by_id(self):
+        """GET /meetings/{id} returns the matching meeting."""
+        meetings = await self._get_meetings()
+        if not meetings:
+            pytest.skip("No meetings found")
+        meeting_id = meetings[0]["id"]
+        meeting = await client.get(f"/meetings/{meeting_id}")
+        assert meeting["id"] == meeting_id
+
+    async def test_title_filter(self):
+        """Discover a title from listing, then filter by it."""
+        meetings = await self._get_meetings()
+        title = next((m["title"] for m in meetings if m.get("title")), None)
+        if not title:
+            pytest.skip("No meetings with title populated")
+
+        data = await client.get("/meetings/search", {"title": title})
+        results = client._extract_results(data)
+        assert len(results) > 0
+
+    async def test_created_from_filter(self):
+        """created_from filter should only return meetings created on/after that date."""
+        meetings = await self._get_meetings()
+        if not meetings or not meetings[0].get("created_on"):
+            pytest.skip("No meetings with created_on populated")
+        cutoff = meetings[0]["created_on"][:10]
+        data = await client.get("/meetings/search", {"created_from": cutoff})
+        results = client._extract_results(data)
+        if not results:
+            pytest.skip("No meetings found matching created_from filter")
+        cutoff_dt = datetime.fromisoformat(cutoff).replace(tzinfo=timezone.utc)
+        for r in results:
+            created_on = r.get("created_on")
+            assert created_on, f"Meeting {r.get('id')} missing created_on"
+            dt = _parse_dt(created_on)
+            assert dt >= cutoff_dt
+
+    async def test_starting_from_filter(self):
+        """starting_from filter should return meetings starting on/after that date."""
+        meetings = await self._get_meetings()
+        if not meetings or not meetings[0].get("start_date"):
+            pytest.skip("No meetings with start_date populated")
+        cutoff = meetings[0]["start_date"][:10]
+        data = await client.get("/meetings/search", {"starting_from": cutoff})
+        results = client._extract_results(data)
+        assert len(results) > 0
+
+    async def test_owner_id_filter(self):
+        """Discover an owner, filter, verify all results match."""
+        meetings = await self._get_meetings()
+        owner = next((m["owner"] for m in meetings if m.get("owner")), None)
+        if not owner:
+            pytest.skip("No meetings with owner populated")
+
+        data = await client.get("/meetings/search", {"owner_id": owner})
+        results = client._extract_results(data)
+        assert len(results) > 0
+        for r in results:
+            assert r["owner"] == owner
+
+    async def test_related_to_rejected(self):
+        """The API rejects related_to param on /meetings/search with 422."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/meetings/search", {"related_to": "test-slug"})
+        assert exc_info.value.response.status_code == 422
+
+    async def test_related_to_type_rejected(self):
+        """The API rejects related_to_type param on /meetings/search with 422."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/meetings/search", {"related_to_type": "candidate"})
+        assert exc_info.value.response.status_code == 422
+
+
+class TestSearchMeetings:
+    """High-level integration tests using client functions."""
+
+    async def test_search_returns_results(self):
+        results = await client.search_meetings(limit=3)
+        assert len(results) > 0
+
+    async def test_results_have_expected_fields(self):
+        results = await client.search_meetings(limit=1)
+        meeting = results[0]
+        assert "id" in meeting
+        assert "title" in meeting
+        assert "meeting_type" in meeting
+
+    async def test_get_meeting_by_id(self):
+        results = await client.search_meetings(limit=1)
+        meeting_id = results[0]["id"]
+        meeting = await client.get_meeting(meeting_id)
+        assert meeting["id"] == meeting_id
+        assert "title" in meeting
+
+    async def test_summarize_meeting_from_live_data(self):
+        results = await client.search_meetings(limit=1)
+        summary = _summarize_meeting(results[0])
+        assert summary["id"] is not None
+        assert summary["title"]

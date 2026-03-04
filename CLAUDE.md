@@ -39,6 +39,9 @@ uv run <cmd>     # run commands in the venv
 | `GET /contacts/search` | Search contacts |
 | `GET /contacts/{slug}` | Contact by slug |
 | `GET /users` | List team members/users |
+| `GET /meetings` | Meetings list |
+| `GET /meetings/search` | Search meetings |
+| `GET /meetings/{id}` | Meeting by ID |
 
 ### Field Mapping Gotchas
 
@@ -61,6 +64,12 @@ uv run <cmd>     # run commands in the venv
 - `/contacts` list endpoint accepts `limit` param
 - Search endpoints return `[]` when called with no filter params
 - "Closed" job status has ID `0`, which the API treats as no-filter — closed jobs cannot be filtered via `/jobs/search`
+- Meetings use `id` (integer) not `slug` — `GET /meetings/{id}`
+- Meeting `meeting_type` is an object: `{"id": 40014, "label": "Candidate Interview"}`
+- Meeting `status` is an integer (not an object like job_status)
+- `/meetings/search` supports: `title`, `created_from/to`, `updated_from/to`, `starting_from/to`, `owner_id` — does NOT accept `related_to` or `related_to_type` (422 rejected)
+- `/meetings` list endpoint accepts `limit` param
+- `/meetings/search` returns `[]` with no filter params
 
 ### Concurrency
 
