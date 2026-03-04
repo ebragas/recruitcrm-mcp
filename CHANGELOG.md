@@ -1,9 +1,107 @@
 # CHANGELOG
 
 
+## v0.10.0 (2026-03-04)
+
+### Bug Fixes
+
+- Rename get_contact param to contact_slug and handle null names
+  ([`aca575c`](https://github.com/ebragas/recruitcrm-mcp/commit/aca575cdb7884b9253ef54603506e896a2034c7b))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Split search_contacts into get_contact + search_contacts
+  ([`f7f7b73`](https://github.com/ebragas/recruitcrm-mcp/commit/f7f7b734b5ba4ef0a405b2c646a23a4021a8f246))
+
+Extract a dedicated get_contact tool so each tool has a consistent return type, matching the
+  established get_*/search_* pattern.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Testing
+
+- Remove duplicate test_title_filter in meetings tests
+  ([`a93d497`](https://github.com/ebragas/recruitcrm-mcp/commit/a93d49768fc4620768254d8f9b71ced5b88374d5))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Split get_meeting test from search_meetings tests
+  ([`7997199`](https://github.com/ebragas/recruitcrm-mcp/commit/799719976e2c4601bc038ee3da604c7473fa250d))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
+## v0.9.0 (2026-03-03)
+
+### Chores
+
+- **release**: 0.9.0
+  ([`1386845`](https://github.com/ebragas/recruitcrm-mcp/commit/13868456ed91d61de261a2c0d0c1f888bd8258bb))
+
+
+## v0.8.0 (2026-03-03)
+
+### Bug Fixes
+
+- Address PR review — clarify search_jobs docstring
+  ([`965216c`](https://github.com/ebragas/recruitcrm-mcp/commit/965216cbc3cd33d2f05b3a636240cf7d40bff063))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Address PR review — test actual tool function via mocked client
+  ([`d8c0dca`](https://github.com/ebragas/recruitcrm-mcp/commit/d8c0dca2a862c7c125c9ac1bb5740d0e6b928d13))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Address PR review — use _parse_dt in job date tests
+  ([`bfac6ec`](https://github.com/ebragas/recruitcrm-mcp/commit/bfac6ecba603678da29bd4a380db57af39755e12))
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.8.0
+  ([`2801772`](https://github.com/ebragas/recruitcrm-mcp/commit/2801772fbe56e4665c526863807dd7cb8395dbe6))
+
+### Features
+
+- Add search_contacts tool with slug short-circuit
+  ([`d2eabb5`](https://github.com/ebragas/recruitcrm-mcp/commit/d2eabb5796e1758d118ea110449df4d22ad3cae8))
+
+Add search_contacts MCP tool combining listing and searching contacts. When contact_slug is
+  provided, short-circuits to return raw record. Otherwise searches via /contacts/search with
+  filters or falls back to /contacts for no-filter listing. Integration tests discovered that
+  designation filter is rejected (400) by the API.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Add search_meetings tool with ID short-circuit
+  ([`154a83c`](https://github.com/ebragas/recruitcrm-mcp/commit/154a83cfd32a119ab7c0866a25ad457fae7702f4))
+
+Add search_meetings MCP tool for searching and listing meetings in Recruit CRM. Meetings use integer
+  `id` (not `slug`). Supported search params: title, created_from/to, updated_from/to,
+  starting_from/to,
+
+owner_id. API rejects related_to and related_to_type with 422.
+
+Includes integration tests (raw API probes + client-level), unit tests, client methods
+  (search_meetings, get_meeting), _summarize_meeting, and CLAUDE.md endpoint/gotcha documentation.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.7.0 (2026-03-03)
 
 ### Bug Fixes
+
+- Address PR review — fix docstring and test flakiness
+  ([`160850d`](https://github.com/ebragas/recruitcrm-mcp/commit/160850db076169e821f27da2fb4416279d769a90))
+
+- Update search_jobs docstring: filters are optional, empty list with no filters (not a hard
+  requirement) - Derive date filter cutoffs from existing data in integration tests instead of
+  hardcoding, with pytest.skip on empty results
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Address PR review — fuzzy country assertion and flaky date test
   ([`2c86a18`](https://github.com/ebragas/recruitcrm-mcp/commit/2c86a18a1594385df65f1a718babb4f0a92beab4))
@@ -24,6 +122,18 @@ Replace non-functional query/city/job_title params with first_name/last_name tha
   sort_by=updated_at for the no-filter fallback path.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Remove vacuous assertion in test_returns_results
+  ([`8090bd0`](https://github.com/ebragas/recruitcrm-mcp/commit/8090bd08f34dba29efdb8e364ef8f3764a70ec25))
+
+The `assert len(results) > 0` inside `if results:` was always true.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- **release**: 0.7.0
+  ([`5d98ad6`](https://github.com/ebragas/recruitcrm-mcp/commit/5d98ad6fecac6539c968f44fc15fb44e2aa53531))
 
 ### Continuous Integration
 
@@ -48,6 +158,38 @@ Add state, country, created_from, created_to, updated_from, updated_to params to
 Add integration tests verifying filter correctness (country, state, date range, combined filters)
   and rejection guard tests for sort params. Update CLAUDE.md with API gotchas and TDD workflow for
   new API params.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Main-155 expand search_jobs response fields, add date/owner filters and list_users tool
+  ([`6710fd5`](https://github.com/ebragas/recruitcrm-mcp/commit/6710fd5c211b8dcc1201cd981f69fb6e6931b1a1))
+
+Add 12 new fields to job summaries (salary, experience, location type, description, etc.), date
+  range and owner_id filters to search_jobs, and a new list_users tool for discovering owner IDs.
+
+Also fix pre-existing trio test failures by switching asyncio.sleep to anyio.sleep and restricting
+  test backend to asyncio-only (removes trio dependency).
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Main-156 add get_assigned_candidates tool
+  ([`cc9be8a`](https://github.com/ebragas/recruitcrm-mcp/commit/cc9be8a10e1775aec9ceecf2405d01822d3417b9))
+
+Add tool to retrieve candidates assigned to a job with their hiring stage via GET
+  /jobs/{slug}/assigned-candidates. Supports status_id filtering and client-side limit enforcement.
+  Reuses _summarize_candidate for consistent output with search_candidates.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Refactoring
+
+- Extract _extract_results helper, fix _job_location_label, remove description from job summary
+  ([`b94637c`](https://github.com/ebragas/recruitcrm-mcp/commit/b94637c123845d187f48f20e4c6e175e22c094fa))
+
+- Extract _extract_results() to deduplicate 4 identical response-parsing blocks in client.py - Fix
+  _job_location_label None handling: replace str(None) accidental fallthrough with explicit guard -
+  Remove job_description_text from _summarize_job — large HTML payloads belong in get_job/job
+  description resource, not list/search summaries
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
