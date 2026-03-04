@@ -365,6 +365,44 @@ async def get_company(company_slug: str) -> dict:
     return await get(f"/companies/{company_slug}")
 
 
+async def search_notes(
+    added_from: str | None = None,
+    added_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search for notes using available filters.
+
+    When any filter is provided, uses ``/notes/search``.
+    When no filters are provided, falls back to ``/notes`` (paginated list).
+
+    Note: the API uses ``added_from``/``added_to`` instead of
+    ``created_from``/``created_to``.
+    """
+    filters: dict[str, Any] = {}
+    if added_from:
+        filters["added_from"] = added_from
+    if added_to:
+        filters["added_to"] = added_to
+    if updated_from:
+        filters["updated_from"] = updated_from
+    if updated_to:
+        filters["updated_to"] = updated_to
+
+    if filters:
+        data = await get("/notes/search", filters)
+    else:
+        data = await get("/notes", {"limit": limit})
+
+    return _extract_results(data)[:limit]
+
+
+async def get_note(note_id: int | str) -> dict:
+    """Get a single note by ID."""
+    return await get(f"/notes/{note_id}")
+
+
 async def search_tasks(
     title: str | None = None,
     created_from: str | None = None,

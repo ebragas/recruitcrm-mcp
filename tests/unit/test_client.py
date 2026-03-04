@@ -267,6 +267,79 @@ class TestGetContact:
         assert result["first_name"] == "Jane"
 
 
+class TestSearchNotes:
+    @pytest.mark.anyio
+    async def test_uses_search_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/notes/search"
+            assert params["added_from"] == "2025-01-01"
+            return {"data": [{"id": 1}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_notes(added_from="2025-01-01")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_no_filters_uses_list_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/notes"
+            assert "limit" in params
+            return {"data": [{"id": 1}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_notes()
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_date_range_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/notes/search"
+            assert params["added_from"] == "2025-01-01"
+            assert params["added_to"] == "2025-06-30"
+            assert params["updated_from"] == "2025-03-01"
+            assert params["updated_to"] == "2025-06-30"
+            return {"data": [{"id": 1}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_notes(
+            added_from="2025-01-01",
+            added_to="2025-06-30",
+            updated_from="2025-03-01",
+            updated_to="2025-06-30",
+        )
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_client_side(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"id": i} for i in range(100)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_notes(limit=3)
+        assert len(results) == 3
+
+    @pytest.mark.anyio
+    async def test_handles_empty_response(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_notes(added_from="2099-01-01")
+        assert results == []
+
+
+class TestGetNote:
+    @pytest.mark.anyio
+    async def test_fetches_by_id(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/notes/12345"
+            return {"id": 12345, "description": "A note"}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        result = await client.get_note(12345)
+        assert result["id"] == 12345
+
+
 class TestSearchTasks:
     @pytest.mark.anyio
     async def test_uses_search_endpoint(self, monkeypatch):

@@ -17,6 +17,7 @@ from recruit_crm_mcp.server import (
     _summarize_contact,
     _summarize_job,
     _summarize_meeting,
+    _summarize_note,
     _summarize_task,
     _summarize_user,
 )
@@ -1025,4 +1026,114 @@ class TestSearchTasks:
     async def test_summarize_task_from_live_data(self):
         results = await client.search_tasks(limit=1)
         summary = _summarize_task(results[0])
+        assert summary["id"] is not None
+
+
+class TestNotes:
+    """Raw API probes for notes endpoints."""
+
+    _cached_notes: list[dict] | None = None
+
+    async def _get_notes(self) -> list[dict]:
+        if TestNotes._cached_notes is None:
+            data = await client.get("/notes/search", {"added_from": "2020-01-01"})
+            TestNotes._cached_notes = client._extract_results(data)
+        return TestNotes._cached_notes
+
+    async def test_search_no_filters_returns_empty(self):
+        """/notes/search with no params returns []."""
+        data = await client.get("/notes/search")
+        results = client._extract_results(data)
+        assert results == []
+
+    async def test_list_endpoint_exists(self):
+        """GET /notes with limit returns results."""
+        data = await client.get("/notes", {"limit": 3})
+        results = client._extract_results(data)
+        assert isinstance(results, list)
+        assert len(results) > 0
+
+    async def test_note_has_expected_fields(self):
+        """Verify field names from a note record.
+
+        Note: notes use 'id' (integer) not 'slug'.
+        """
+        notes = await self._get_notes()
+        if not notes:
+            pytest.skip("No notes found")
+        note = notes[0]
+        for field in [
+            "id", "note_type", "description",
+            "related_to", "related_to_type",
+            "created_on", "updated_on",
+        ]:
+            assert field in note, f"Expected field {field!r} missing from note"
+
+    async def test_get_note_by_id(self):
+        """GET /notes/{id} returns the matching note."""
+        notes = await self._get_notes()
+        if not notes:
+            pytest.skip("No notes found")
+        note_id = notes[0]["id"]
+        note = await client.get(f"/notes/{note_id}")
+        assert note["id"] == note_id
+
+    async def test_added_from_filter(self):
+        """added_from filter should return notes added on/after that date."""
+        notes = await self._get_notes()
+        if not notes or not notes[0].get("created_on"):
+            pytest.skip("No notes with created_on populated")
+        cutoff = notes[0]["created_on"][:10]
+        data = await client.get("/notes/search", {"added_from": cutoff})
+        results = client._extract_results(data)
+        if not results:
+            pytest.skip("No notes found matching added_from filter")
+        cutoff_dt = datetime.fromisoformat(cutoff).replace(tzinfo=timezone.utc)
+        for r in results:
+            created_on = r.get("created_on")
+            assert created_on, f"Note {r.get('id')} missing created_on"
+            dt = _parse_dt(created_on)
+            assert dt >= cutoff_dt
+
+    async def test_related_to_rejected(self):
+        """The API rejects related_to param on /notes/search with 422."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/notes/search", {"related_to": "test-slug"})
+        assert exc_info.value.response.status_code == 422
+
+    async def test_related_to_type_rejected(self):
+        """The API rejects related_to_type param on /notes/search with 422."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/notes/search", {"related_to_type": "candidate"})
+        assert exc_info.value.response.status_code == 422
+
+    async def test_created_from_rejected(self):
+        """The API rejects created_from param (uses added_from instead) with 400."""
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.get("/notes/search", {"created_from": "2020-01-01"})
+        assert exc_info.value.response.status_code == 400
+
+
+class TestSearchNotes:
+    """High-level integration tests using client functions."""
+
+    async def test_search_returns_results(self):
+        results = await client.search_notes(limit=3)
+        assert len(results) > 0
+
+    async def test_results_have_expected_fields(self):
+        results = await client.search_notes(limit=1)
+        note = results[0]
+        assert "id" in note
+        assert "note_type" in note
+
+    async def test_get_note_by_id(self):
+        results = await client.search_notes(limit=1)
+        note_id = results[0]["id"]
+        note = await client.get_note(note_id)
+        assert note["id"] == note_id
+
+    async def test_summarize_note_from_live_data(self):
+        results = await client.search_notes(limit=1)
+        summary = _summarize_note(results[0])
         assert summary["id"] is not None

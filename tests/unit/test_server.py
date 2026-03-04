@@ -8,6 +8,7 @@ from recruit_crm_mcp.server import (
     _summarize_contact,
     _summarize_job,
     _summarize_meeting,
+    _summarize_note,
     _summarize_task,
     _summarize_user,
     _job_location_label,
@@ -15,10 +16,12 @@ from recruit_crm_mcp.server import (
     get_company,
     get_contact,
     get_meeting,
+    get_note,
     get_task,
     search_companies,
     search_contacts,
     search_meetings,
+    search_notes,
     search_tasks,
 )
 
@@ -135,6 +138,102 @@ class TestSearchContactsTool:
         assert results[0]["slug"] == "contact-123"
         assert results[0]["name"] == "Jane Doe"
         assert results[0]["designation"] == "VP Sales"
+
+
+class TestSummarizeNote:
+    def test_basic_fields(self):
+        raw = {
+            "id": 63590686,
+            "note_type": {"id": 48622, "label": "Note"},
+            "description": "Important note about candidate",
+            "related_to": "cand-slug-123",
+            "related_to_type": "candidate",
+            "created_on": "2025-04-29T17:39:50.000000Z",
+            "updated_on": "2025-04-29T17:55:30.000000Z",
+        }
+        result = _summarize_note(raw)
+        assert result["id"] == 63590686
+        assert result["note_type"] == "Note"
+        assert result["description"] == "Important note about candidate"
+        assert result["related_to"] == "cand-slug-123"
+        assert result["related_to_type"] == "candidate"
+        assert result["created_on"] == "2025-04-29T17:39:50.000000Z"
+        assert result["updated_on"] == "2025-04-29T17:55:30.000000Z"
+
+    def test_empty_record(self):
+        result = _summarize_note({})
+        assert result["id"] is None
+        assert result["note_type"] is None
+        assert result["description"] is None
+        assert result["related_to"] is None
+        assert result["related_to_type"] is None
+        assert result["created_on"] is None
+        assert result["updated_on"] is None
+
+
+class TestGetNoteTool:
+    @pytest.mark.anyio
+    async def test_returns_full_record(self, monkeypatch):
+        """get_note should return the full raw note record."""
+        raw_note = {
+            "id": 12345,
+            "note_type": {"id": 1, "label": "Note"},
+            "description": "A note",
+        }
+
+        async def mock_get_note(note_id):
+            assert note_id == 12345
+            return raw_note
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_note", mock_get_note)
+
+        result = await get_note(12345)
+        assert result == raw_note
+
+
+class TestSearchNotesTool:
+    @pytest.mark.anyio
+    async def test_returns_summarized_list(self, monkeypatch):
+        """Filtered search should return summarized note list."""
+        mock_data = [
+            {
+                "id": 12345,
+                "note_type": {"id": 1, "label": "Note"},
+                "description": "Follow up note",
+                "related_to": "cand-123",
+                "related_to_type": "candidate",
+                "created_on": "2025-04-29T17:39:50.000000Z",
+                "updated_on": "2025-04-29T17:55:30.000000Z",
+            },
+        ]
+
+        async def mock_search(**kwargs):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "search_notes", mock_search)
+
+        results = await search_notes(created_from="2025-01-01")
+        assert len(results) == 1
+        assert results[0]["id"] == 12345
+        assert results[0]["note_type"] == "Note"
+
+    @pytest.mark.anyio
+    async def test_maps_created_from_to_added_from(self, monkeypatch):
+        """The tool should map created_from/to to added_from/to internally."""
+        captured = {}
+
+        async def mock_search(**kwargs):
+            captured.update(kwargs)
+            return []
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "search_notes", mock_search)
+
+        await search_notes(created_from="2025-01-01", created_to="2025-06-30")
+        assert captured["added_from"] == "2025-01-01"
+        assert captured["added_to"] == "2025-06-30"
 
 
 class TestSummarizeTask:
