@@ -13,6 +13,7 @@ import pytest
 from recruit_crm_mcp import client
 from recruit_crm_mcp.server import (
     _summarize_candidate,
+    _summarize_company,
     _summarize_contact,
     _summarize_job,
     _summarize_meeting,
@@ -724,3 +725,165 @@ class TestSearchMeetings:
         summary = _summarize_meeting(results[0])
         assert summary["id"] is not None
         assert summary["title"]
+
+
+class TestCompanies:
+    """Raw API probes for companies endpoints."""
+
+    _cached_companies: list[dict] | None = None
+
+    async def _get_companies(self) -> list[dict]:
+        if TestCompanies._cached_companies is None:
+            data = await client.get("/companies", {"limit": 10})
+            TestCompanies._cached_companies = client._extract_results(data)
+        return TestCompanies._cached_companies
+
+    async def test_list_returns_results(self):
+        """GET /companies with limit returns non-empty results."""
+        companies = await self._get_companies()
+        assert len(companies) > 0
+
+    async def test_company_has_expected_fields(self):
+        """Verify field names on a company record."""
+        companies = await self._get_companies()
+        company = companies[0]
+        for field in [
+            "slug", "company_name", "about_company", "website",
+            "city", "state", "country", "linkedin",
+        ]:
+            assert field in company, f"Expected field {field!r} missing from company"
+
+    async def test_get_company_by_slug(self):
+        """GET /companies/{slug} returns the matching company."""
+        companies = await self._get_companies()
+        slug = companies[0]["slug"]
+        company = await client.get(f"/companies/{slug}")
+        assert company["slug"] == slug
+        assert "company_name" in company
+
+    async def test_search_no_filters_returns_empty(self):
+        """/companies/search with no params returns []."""
+        data = await client.get("/companies/search")
+        results = client._extract_results(data)
+        assert results == []
+
+    async def test_company_name_filter(self):
+        """Discover a company_name, then filter by it."""
+        companies = await self._get_companies()
+        name = next((c["company_name"] for c in companies if c.get("company_name")), None)
+        if not name:
+            pytest.skip("No companies with company_name populated")
+
+        data = await client.get("/companies/search", {"company_name": name})
+        results = client._extract_results(data)
+        assert len(results) > 0
+
+    async def test_created_from_filter(self):
+        """created_from filter should return companies created on/after that date."""
+        companies = await self._get_companies()
+        if not companies or not companies[0].get("created_on"):
+            pytest.skip("No companies with created_on populated")
+        cutoff = companies[0]["created_on"][:10]
+        data = await client.get("/companies/search", {"created_from": cutoff})
+        results = client._extract_results(data)
+        if not results:
+            pytest.skip("No companies found matching created_from filter")
+        cutoff_dt = datetime.fromisoformat(cutoff).replace(tzinfo=timezone.utc)
+        for r in results:
+            created_on = r.get("created_on")
+            assert created_on, f"Company {r.get('slug')} missing created_on"
+            dt = _parse_dt(created_on)
+            assert dt >= cutoff_dt
+
+    async def test_owner_id_filter(self):
+        """Discover an owner, filter, verify all results match."""
+        companies = await self._get_companies()
+        owner = next((c["owner"] for c in companies if c.get("owner")), None)
+        if not owner:
+            pytest.skip("No companies with owner populated")
+
+        data = await client.get("/companies/search", {"owner_id": owner})
+        results = client._extract_results(data)
+        assert len(results) > 0
+        for r in results:
+            assert r["owner"] == owner
+
+    async def test_sort_by_filter(self):
+        """Probe if sort_by is accepted."""
+        try:
+            data = await client.get("/companies/search", {
+                "company_name": "a", "sort_by": "createdon", "sort_order": "asc",
+            })
+            results = client._extract_results(data)
+            assert isinstance(results, list)
+        except httpx.HTTPStatusError as exc:
+            pytest.skip(f"sort_by rejected with {exc.response.status_code}")
+
+    async def test_owner_name_filter(self):
+        """Probe if owner_name is accepted."""
+        try:
+            data = await client.get("/companies/search", {"owner_name": "Test"})
+            results = client._extract_results(data)
+            assert isinstance(results, list)
+        except httpx.HTTPStatusError as exc:
+            pytest.skip(f"owner_name rejected with {exc.response.status_code}")
+
+    async def test_owner_email_filter(self):
+        """Probe if owner_email is accepted."""
+        try:
+            data = await client.get("/companies/search", {"owner_email": "test@example.com"})
+            results = client._extract_results(data)
+            assert isinstance(results, list)
+        except httpx.HTTPStatusError as exc:
+            pytest.skip(f"owner_email rejected with {exc.response.status_code}")
+
+    async def test_exact_search_filter(self):
+        """Probe if exact_search is accepted."""
+        companies = await self._get_companies()
+        name = next((c["company_name"] for c in companies if c.get("company_name")), None)
+        if not name:
+            pytest.skip("No companies with company_name populated")
+        try:
+            data = await client.get("/companies/search", {
+                "company_name": name, "exact_search": "true",
+            })
+            results = client._extract_results(data)
+            assert isinstance(results, list)
+        except httpx.HTTPStatusError as exc:
+            pytest.skip(f"exact_search rejected with {exc.response.status_code}")
+
+    async def test_marked_as_off_limit_filter(self):
+        """Probe if marked_as_off_limit is accepted."""
+        try:
+            data = await client.get("/companies/search", {"marked_as_off_limit": "false"})
+            results = client._extract_results(data)
+            assert isinstance(results, list)
+        except httpx.HTTPStatusError as exc:
+            pytest.skip(f"marked_as_off_limit rejected with {exc.response.status_code}")
+
+
+class TestSearchCompanies:
+    """High-level integration tests using client functions."""
+
+    async def test_search_returns_results(self):
+        results = await client.search_companies(limit=3)
+        assert len(results) > 0
+
+    async def test_results_have_expected_fields(self):
+        results = await client.search_companies(limit=1)
+        company = results[0]
+        assert "slug" in company
+        assert "company_name" in company
+
+    async def test_get_company_by_slug(self):
+        results = await client.search_companies(limit=1)
+        slug = results[0]["slug"]
+        company = await client.get_company(slug)
+        assert company["slug"] == slug
+        assert "company_name" in company
+
+    async def test_summarize_company_from_live_data(self):
+        results = await client.search_companies(limit=1)
+        summary = _summarize_company(results[0])
+        assert summary["slug"] is not None
+        assert summary["company_name"]
