@@ -201,7 +201,7 @@ class TestGetCompanyTool:
 class TestSearchCompaniesTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
-        """Without company_slug, should return summarized company list."""
+        """Without filters, should return summarized company list."""
         mock_data = [
             {
                 "slug": "acme-corp",

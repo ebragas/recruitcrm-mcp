@@ -225,7 +225,7 @@ async def search_companies(
     With no filters, returns a paginated list of recent companies.
     Date params use YYYY-MM-DD format.
     sort_by accepts 'createdon' or 'updatedon'. sort_order accepts 'asc' or 'desc'.
-    Set exact_search=true for exact name matching (default is fuzzy/like matching).
+    Set exact_search=True for exact name matching (default is fuzzy/like matching).
     Use list_users to find valid owner_id values.
     """
     results = await client.search_companies(
