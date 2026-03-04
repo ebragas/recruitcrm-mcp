@@ -11,6 +11,7 @@ from recruit_crm_mcp.server import (
     _job_location_label,
     get_assigned_candidates,
     get_contact,
+    get_meeting,
     search_contacts,
     search_meetings,
 )
@@ -173,10 +174,10 @@ class TestSummarizeMeeting:
         assert result["owner"] is None
 
 
-class TestSearchMeetingsTool:
+class TestGetMeetingTool:
     @pytest.mark.anyio
-    async def test_meeting_id_short_circuits_to_get(self, monkeypatch):
-        """When meeting_id is provided, should call get_meeting directly."""
+    async def test_returns_full_record(self, monkeypatch):
+        """get_meeting should return the full raw meeting record."""
         raw_meeting = {
             "id": 12345,
             "title": "Interview",
@@ -191,9 +192,11 @@ class TestSearchMeetingsTool:
         from recruit_crm_mcp import server
         monkeypatch.setattr(server.client, "get_meeting", mock_get_meeting)
 
-        result = await search_meetings(meeting_id=12345)
+        result = await get_meeting(12345)
         assert result == raw_meeting
 
+
+class TestSearchMeetingsTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
         """Without meeting_id, should return summarized meeting list."""
