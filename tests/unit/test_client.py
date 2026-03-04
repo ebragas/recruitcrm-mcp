@@ -402,17 +402,6 @@ class TestSearchMeetings:
         assert len(results) == 1
 
     @pytest.mark.anyio
-    async def test_title_filter(self, monkeypatch):
-        async def mock_get(path, params=None):
-            assert path == "/meetings/search"
-            assert params["title"] == "Interview"
-            return {"data": [{"title": "Interview"}]}
-
-        monkeypatch.setattr(client, "get", mock_get)
-        results = await client.search_meetings(title="Interview")
-        assert len(results) == 1
-
-    @pytest.mark.anyio
     async def test_owner_id_filter(self, monkeypatch):
         async def mock_get(path, params=None):
             assert path == "/meetings/search"

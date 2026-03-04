@@ -11,6 +11,9 @@ from recruit_crm_mcp.server import (
     _summarize_user,
     _job_location_label,
     get_assigned_candidates,
+    get_company,
+    get_contact,
+    get_meeting,
     search_companies,
     search_contacts,
     search_meetings,
@@ -76,10 +79,10 @@ class TestSummarizeContact:
         assert result["linkedin"] is None
 
 
-class TestSearchContactsTool:
+class TestGetContactTool:
     @pytest.mark.anyio
-    async def test_contact_slug_short_circuits_to_get(self, monkeypatch):
-        """When contact_slug is provided, should call get_contact directly."""
+    async def test_returns_full_record(self, monkeypatch):
+        """get_contact should return the full raw contact record."""
         raw_contact = {
             "slug": "contact-123",
             "first_name": "Jane",
@@ -94,9 +97,11 @@ class TestSearchContactsTool:
         from recruit_crm_mcp import server
         monkeypatch.setattr(server.client, "get_contact", mock_get_contact)
 
-        result = await search_contacts(contact_slug="contact-123")
+        result = await get_contact("contact-123")
         assert result == raw_contact
 
+
+class TestSearchContactsTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
         """Without contact_slug, should return summarized contact list."""
@@ -172,10 +177,10 @@ class TestSummarizeCompany:
         assert result["is_child_company"] is None
 
 
-class TestSearchCompaniesTool:
+class TestGetCompanyTool:
     @pytest.mark.anyio
-    async def test_company_slug_short_circuits_to_get(self, monkeypatch):
-        """When company_slug is provided, should call get_company directly."""
+    async def test_returns_full_record(self, monkeypatch):
+        """get_company should return the full raw company record."""
         raw_company = {
             "slug": "acme-corp",
             "company_name": "Acme Corp",
@@ -189,9 +194,11 @@ class TestSearchCompaniesTool:
         from recruit_crm_mcp import server
         monkeypatch.setattr(server.client, "get_company", mock_get_company)
 
-        result = await search_companies(company_slug="acme-corp")
+        result = await get_company("acme-corp")
         assert result == raw_company
 
+
+class TestSearchCompaniesTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
         """Without company_slug, should return summarized company list."""
@@ -266,10 +273,10 @@ class TestSummarizeMeeting:
         assert result["owner"] is None
 
 
-class TestSearchMeetingsTool:
+class TestGetMeetingTool:
     @pytest.mark.anyio
-    async def test_meeting_id_short_circuits_to_get(self, monkeypatch):
-        """When meeting_id is provided, should call get_meeting directly."""
+    async def test_returns_full_record(self, monkeypatch):
+        """get_meeting should return the full raw meeting record."""
         raw_meeting = {
             "id": 12345,
             "title": "Interview",
@@ -284,9 +291,11 @@ class TestSearchMeetingsTool:
         from recruit_crm_mcp import server
         monkeypatch.setattr(server.client, "get_meeting", mock_get_meeting)
 
-        result = await search_meetings(meeting_id=12345)
+        result = await get_meeting(12345)
         assert result == raw_meeting
 
+
+class TestSearchMeetingsTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
         """Without meeting_id, should return summarized meeting list."""
