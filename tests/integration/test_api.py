@@ -11,15 +11,15 @@ import httpx
 import pytest
 
 from recruit_crm_mcp import client
-from recruit_crm_mcp.server import (
-    _summarize_candidate,
-    _summarize_company,
-    _summarize_contact,
-    _summarize_job,
-    _summarize_meeting,
-    _summarize_note,
-    _summarize_task,
-    _summarize_user,
+from recruit_crm_mcp.models import (
+    CandidateSummary,
+    CompanySummary,
+    ContactSummary,
+    JobSummary,
+    MeetingSummary,
+    NoteSummary,
+    TaskSummary,
+    UserSummary,
 )
 
 
@@ -56,9 +56,9 @@ class TestCandidates:
 
     async def test_summarize_candidate_from_live_data(self):
         results = await client.search_candidates(limit=1)
-        summary = _summarize_candidate(results[0])
-        assert summary["slug"] is not None
-        assert summary["name"]  # non-empty
+        summary = CandidateSummary.from_api_response(results[0])
+        assert summary.slug is not None
+        assert summary.name  # non-empty
 
     async def test_get_candidate_by_slug(self):
         results = await client.search_candidates(limit=1)
@@ -225,10 +225,10 @@ class TestListJobs:
 
     async def test_summarize_job_from_live_data(self):
         results = await client.list_jobs(limit=1)
-        summary = _summarize_job(results[0])
-        assert summary["slug"] is not None
-        assert summary["name"]
-        assert summary["status"]  # should resolve from job_status.label
+        summary = JobSummary.from_api_response(results[0])
+        assert summary.slug is not None
+        assert summary.name
+        assert summary.status  # should resolve from job_status.label
 
     async def test_get_job_by_slug(self):
         results = await client.list_jobs(limit=1)
@@ -437,11 +437,10 @@ class TestListUsers:
 
     async def test_summarize_user_from_live_data(self):
         results = await client.list_users()
-        summary = _summarize_user(results[0])
-        assert summary["id"] is not None
-        assert summary["name"]
-        # email may be None for some users
-        assert "email" in summary
+        summary = UserSummary.from_api_response(results[0])
+        assert summary.id is not None
+        assert summary.name
+        # email may be None for some users — attribute always exists on the model
 
 
 class TestContacts:
@@ -583,9 +582,9 @@ class TestSearchContacts:
 
     async def test_summarize_contact_from_live_data(self):
         results = await client.search_contacts(limit=1)
-        summary = _summarize_contact(results[0])
-        assert summary["slug"] is not None
-        assert summary["name"]
+        summary = ContactSummary.from_api_response(results[0])
+        assert summary.slug is not None
+        assert summary.name
 
 
 class TestMeetings:
@@ -724,9 +723,9 @@ class TestSearchMeetings:
 
     async def test_summarize_meeting_from_live_data(self):
         results = await client.search_meetings(limit=1)
-        summary = _summarize_meeting(results[0])
-        assert summary["id"] is not None
-        assert summary["title"]
+        summary = MeetingSummary.from_api_response(results[0])
+        assert summary.id is not None
+        assert summary.title
 
 
 class TestCompanies:
@@ -886,9 +885,9 @@ class TestSearchCompanies:
 
     async def test_summarize_company_from_live_data(self):
         results = await client.search_companies(limit=1)
-        summary = _summarize_company(results[0])
-        assert summary["slug"] is not None
-        assert summary["company_name"]
+        summary = CompanySummary.from_api_response(results[0])
+        assert summary.slug is not None
+        assert summary.company_name
 
 
 class TestTasks:
@@ -1025,8 +1024,8 @@ class TestSearchTasks:
 
     async def test_summarize_task_from_live_data(self):
         results = await client.search_tasks(limit=1)
-        summary = _summarize_task(results[0])
-        assert summary["id"] is not None
+        summary = TaskSummary.from_api_response(results[0])
+        assert summary.id is not None
 
 
 class TestNotes:
@@ -1135,5 +1134,5 @@ class TestSearchNotes:
 
     async def test_summarize_note_from_live_data(self):
         results = await client.search_notes(limit=1)
-        summary = _summarize_note(results[0])
-        assert summary["id"] is not None
+        summary = NoteSummary.from_api_response(results[0])
+        assert summary.id is not None
