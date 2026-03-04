@@ -35,6 +35,9 @@ uv run <cmd>     # run commands in the venv
 | `GET /jobs` | Jobs list |
 | `GET /jobs/{slug}` | Job by slug |
 | `GET /jobs/{slug}/assigned-candidates` | Candidates assigned to a job |
+| `GET /contacts` | Contacts list |
+| `GET /contacts/search` | Search contacts |
+| `GET /contacts/{slug}` | Contact by slug |
 | `GET /users` | List team members/users |
 
 ### Field Mapping Gotchas
@@ -54,6 +57,8 @@ uv run <cmd>     # run commands in the venv
 - Job salary fields use `min_annual_salary`/`max_annual_salary` (not `minimum_`/`maximum_` prefix)
 - `job_location_type` is a string: `"0"`=On-site, `"1"`=Remote, `"2"`=Hybrid
 - `owner` field on jobs is an integer user ID — use `/users` endpoint to resolve to names
+- `/contacts/search` supports: `first_name`, `last_name`, `email`, `linkedin`, `contact_number`, `company_slug`, `created_from/to`, `updated_from/to`, `owner_id` — does NOT accept `designation` (400 rejected)
+- `/contacts` list endpoint accepts `limit` param
 - Search endpoints return `[]` when called with no filter params
 - "Closed" job status has ID `0`, which the API treats as no-filter — closed jobs cannot be filtered via `/jobs/search`
 
