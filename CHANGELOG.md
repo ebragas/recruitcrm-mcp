@@ -1,7 +1,55 @@
 # CHANGELOG
 
 
+## v0.13.0 (2026-03-04)
+
+### Bug Fixes
+
+- Use correct Copilot reviewer name in workflow and skill
+  ([`5617d92`](https://github.com/ebragas/recruitcrm-mcp/commit/5617d9225261c82d4c92867282d9d78013b49938))
+
+The API requires `reviewers[]=Copilot` not `copilot-pull-request-reviewer`.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- Add rule to never include Co-Authored-By Claude in commits
+  ([`1b145a5`](https://github.com/ebragas/recruitcrm-mcp/commit/1b145a50826cf2c49bd3ce0a58cba6d08c12dac6))
+
+- Auto-request Copilot review in workflow and PR comments skill
+  ([`e07df48`](https://github.com/ebragas/recruitcrm-mcp/commit/e07df48f8d145ed90008f4241de70754c46ef443))
+
+Add Copilot review request step to the workflow in CLAUDE.md and ensure the review-pr-comments skill
+  always re-requests Copilot review after pushing fixes.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Update uv.lock to match pyproject.toml version
+  ([`c08ddea`](https://github.com/ebragas/recruitcrm-mcp/commit/c08ddeac3035b4e7f1fc071db03f92459c1d5fff))
+
+### Features
+
+- **client**: Add POST and DELETE support to HTTP client
+  ([`119e117`](https://github.com/ebragas/recruitcrm-mcp/commit/119e117712eb9d5be1e7bbd74f6bcbbc9af4d105))
+
+Extract shared _request() base method from get() to DRY up auth, rate-limit retry, and error
+  handling. Add post() and delete() convenience wrappers.
+
+The Recruit CRM API uses POST for both create and edit operations (not PUT/PATCH), so only post()
+  and delete() are needed.
+
+MAIN-170
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.12.0 (2026-03-04)
+
+### Chores
+
+- **release**: 0.12.0
+  ([`02a2e6a`](https://github.com/ebragas/recruitcrm-mcp/commit/02a2e6a53811e88db5a2e19ea666da135d979fec))
 
 ### Features
 
