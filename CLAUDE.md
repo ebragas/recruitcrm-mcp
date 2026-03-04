@@ -42,6 +42,9 @@ uv run <cmd>     # run commands in the venv
 | `GET /companies` | Companies list |
 | `GET /companies/search` | Search companies |
 | `GET /companies/{slug}` | Company by slug |
+| `GET /notes` | Notes list |
+| `GET /notes/search` | Search notes |
+| `GET /notes/{id}` | Note by ID |
 | `GET /tasks` | Tasks list |
 | `GET /tasks/search` | Search tasks |
 | `GET /tasks/{id}` | Task by ID |
@@ -76,6 +79,12 @@ uv run <cmd>     # run commands in the venv
 - `/companies` list endpoint accepts `limit` param
 - `/companies/search` returns `[]` with no filter params
 - Companies are referenced by `slug` — jobs reference companies via `company_slug`
+- Notes use `id` (integer) not `slug` — `GET /notes/{id}`
+- `/notes/search` supports: `added_from/to`, `updated_from/to` — does NOT accept `created_from/to` (400 rejected), `related_to` or `related_to_type` (422 rejected)
+- `/notes/search` uses `added_from`/`added_to` instead of `created_from`/`created_to` (unique naming)
+- `/notes` list endpoint accepts `limit` param
+- `/notes/search` returns `[]` with no filter params
+- Note `note_type` is an object: `{"id": 48622, "label": "Note"}`
 - Tasks use `id` (integer) not `slug` — `GET /tasks/{id}`
 - `/tasks/search` supports: `title`, `created_from/to`, `updated_from/to`, `starting_from/to`, `owner_id` — does NOT accept `related_to` or `related_to_type` (422 rejected)
 - `/tasks` list endpoint accepts `limit` param

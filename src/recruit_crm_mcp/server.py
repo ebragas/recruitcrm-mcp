@@ -242,6 +242,35 @@ async def search_companies(
 
 
 @mcp.tool()
+async def search_notes(
+    note_id: int | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    limit: int = 10,
+) -> list[dict] | dict:
+    """Search for notes by date range.
+
+    If note_id is provided, returns the full raw note record (short-circuits search).
+    Otherwise, provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent notes.
+    Date params use YYYY-MM-DD format.
+    """
+    if note_id is not None:
+        return await client.get_note(note_id)
+
+    results = await client.search_notes(
+        added_from=created_from,
+        added_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        limit=limit,
+    )
+    return [_summarize_note(n) for n in results]
+
+
+@mcp.tool()
 async def search_tasks(
     task_id: int | None = None,
     title: str | None = None,
@@ -350,6 +379,21 @@ async def job_description(job_id: str) -> str:
     description = data.get("job_description_text") or ""
     title = data.get("name") or "Unknown"
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
+
+
+def _summarize_note(n: dict) -> dict:
+    """Extract key fields from a note record for concise display."""
+    note_type = n.get("note_type")
+    type_label = note_type.get("label") if isinstance(note_type, dict) else None
+    return {
+        "id": n.get("id"),
+        "note_type": type_label,
+        "description": n.get("description"),
+        "related_to": n.get("related_to"),
+        "related_to_type": n.get("related_to_type"),
+        "created_on": n.get("created_on"),
+        "updated_on": n.get("updated_on"),
+    }
 
 
 def _summarize_task(t: dict) -> dict:
