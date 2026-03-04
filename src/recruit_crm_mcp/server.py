@@ -242,6 +242,44 @@ async def search_companies(
 
 
 @mcp.tool()
+async def search_tasks(
+    task_id: int | None = None,
+    title: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    starting_from: str | None = None,
+    starting_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict] | dict:
+    """Search for tasks by title, date range, or owner.
+
+    If task_id is provided, returns the full raw task record (short-circuits search).
+    Otherwise, provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent tasks.
+    Date params use YYYY-MM-DD format.
+    Use list_users to find valid owner_id values.
+    """
+    if task_id is not None:
+        return await client.get_task(task_id)
+
+    results = await client.search_tasks(
+        title=title,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        starting_from=starting_from,
+        starting_to=starting_to,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [_summarize_task(t) for t in results]
+
+
+@mcp.tool()
 async def search_meetings(
     meeting_id: int | None = None,
     title: str | None = None,
@@ -312,6 +350,24 @@ async def job_description(job_id: str) -> str:
     description = data.get("job_description_text") or ""
     title = data.get("name") or "Unknown"
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
+
+
+def _summarize_task(t: dict) -> dict:
+    """Extract key fields from a task record for concise display."""
+    task_type = t.get("task_type")
+    type_label = task_type.get("label") if isinstance(task_type, dict) else None
+    return {
+        "id": t.get("id"),
+        "title": t.get("title"),
+        "task_type": type_label,
+        "status": t.get("status"),
+        "start_date": t.get("start_date"),
+        "related_to": t.get("related_to"),
+        "related_to_type": t.get("related_to_type"),
+        "related_to_name": t.get("related_to_name"),
+        "owner": t.get("owner"),
+        "reminder_date": t.get("reminder_date"),
+    }
 
 
 def _summarize_company(c: dict) -> dict:

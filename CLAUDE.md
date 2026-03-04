@@ -42,6 +42,9 @@ uv run <cmd>     # run commands in the venv
 | `GET /companies` | Companies list |
 | `GET /companies/search` | Search companies |
 | `GET /companies/{slug}` | Company by slug |
+| `GET /tasks` | Tasks list |
+| `GET /tasks/search` | Search tasks |
+| `GET /tasks/{id}` | Task by ID |
 | `GET /meetings` | Meetings list |
 | `GET /meetings/search` | Search meetings |
 | `GET /meetings/{id}` | Meeting by ID |
@@ -73,6 +76,11 @@ uv run <cmd>     # run commands in the venv
 - `/companies` list endpoint accepts `limit` param
 - `/companies/search` returns `[]` with no filter params
 - Companies are referenced by `slug` — jobs reference companies via `company_slug`
+- Tasks use `id` (integer) not `slug` — `GET /tasks/{id}`
+- `/tasks/search` supports: `title`, `created_from/to`, `updated_from/to`, `starting_from/to`, `owner_id` — does NOT accept `related_to` or `related_to_type` (422 rejected)
+- `/tasks` list endpoint accepts `limit` param
+- `/tasks/search` returns `[]` with no filter params
+- Task `task_type` can be null or an object: `{"id": 1, "label": "Call"}`
 - Meetings use `id` (integer) not `slug` — `GET /meetings/{id}`
 - Meeting `meeting_type` is an object: `{"id": 40014, "label": "Candidate Interview"}`
 - Meeting `status` is an integer (not an object like job_status)

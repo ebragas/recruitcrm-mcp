@@ -8,12 +8,14 @@ from recruit_crm_mcp.server import (
     _summarize_contact,
     _summarize_job,
     _summarize_meeting,
+    _summarize_task,
     _summarize_user,
     _job_location_label,
     get_assigned_candidates,
     search_companies,
     search_contacts,
     search_meetings,
+    search_tasks,
 )
 
 
@@ -127,6 +129,102 @@ class TestSearchContactsTool:
         assert results[0]["slug"] == "contact-123"
         assert results[0]["name"] == "Jane Doe"
         assert results[0]["designation"] == "VP Sales"
+
+
+class TestSummarizeTask:
+    def test_basic_fields(self):
+        raw = {
+            "id": 44261638,
+            "title": "Follow up with Jane",
+            "task_type": {"id": 1, "label": "Call"},
+            "status": 0,
+            "start_date": "2025-04-29T18:30:00.000000Z",
+            "related_to": "cand-slug-123",
+            "related_to_type": "candidate",
+            "related_to_name": "Jane Doe",
+            "owner": 31585,
+            "reminder_date": "2025-04-29T18:00:00.000000Z",
+        }
+        result = _summarize_task(raw)
+        assert result["id"] == 44261638
+        assert result["title"] == "Follow up with Jane"
+        assert result["task_type"] == "Call"
+        assert result["status"] == 0
+        assert result["start_date"] == "2025-04-29T18:30:00.000000Z"
+        assert result["related_to"] == "cand-slug-123"
+        assert result["related_to_type"] == "candidate"
+        assert result["related_to_name"] == "Jane Doe"
+        assert result["owner"] == 31585
+        assert result["reminder_date"] == "2025-04-29T18:00:00.000000Z"
+
+    def test_empty_record(self):
+        result = _summarize_task({})
+        assert result["id"] is None
+        assert result["title"] is None
+        assert result["task_type"] is None
+        assert result["status"] is None
+        assert result["start_date"] is None
+        assert result["related_to"] is None
+        assert result["related_to_type"] is None
+        assert result["related_to_name"] is None
+        assert result["owner"] is None
+        assert result["reminder_date"] is None
+
+    def test_null_task_type(self):
+        result = _summarize_task({"task_type": None})
+        assert result["task_type"] is None
+
+
+class TestSearchTasksTool:
+    @pytest.mark.anyio
+    async def test_task_id_short_circuits_to_get(self, monkeypatch):
+        """When task_id is provided, should call get_task directly."""
+        raw_task = {
+            "id": 12345,
+            "title": "Follow up",
+            "task_type": None,
+            "status": 0,
+        }
+
+        async def mock_get_task(task_id):
+            assert task_id == 12345
+            return raw_task
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_task", mock_get_task)
+
+        result = await search_tasks(task_id=12345)
+        assert result == raw_task
+
+    @pytest.mark.anyio
+    async def test_returns_summarized_list(self, monkeypatch):
+        """Without task_id, should return summarized task list."""
+        mock_data = [
+            {
+                "id": 12345,
+                "title": "Follow up",
+                "task_type": {"id": 1, "label": "Call"},
+                "status": 0,
+                "start_date": "2025-04-29T18:30:00.000000Z",
+                "related_to": "cand-123",
+                "related_to_type": "candidate",
+                "related_to_name": "Jane Doe",
+                "owner": 31585,
+                "reminder_date": None,
+            },
+        ]
+
+        async def mock_search(**kwargs):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "search_tasks", mock_search)
+
+        results = await search_tasks(title="Follow up")
+        assert len(results) == 1
+        assert results[0]["id"] == 12345
+        assert results[0]["title"] == "Follow up"
+        assert results[0]["task_type"] == "Call"
 
 
 class TestSummarizeCompany:

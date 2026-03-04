@@ -267,6 +267,105 @@ class TestGetContact:
         assert result["first_name"] == "Jane"
 
 
+class TestSearchTasks:
+    @pytest.mark.anyio
+    async def test_uses_search_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/tasks/search"
+            assert params["title"] == "Follow up"
+            return {"data": [{"title": "Follow up"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_tasks(title="Follow up")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_no_filters_uses_list_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/tasks"
+            assert "limit" in params
+            return {"data": [{"title": "Task"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_tasks()
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_owner_id_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/tasks/search"
+            assert params["owner_id"] == 43135
+            return {"data": [{"owner": 43135}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_tasks(owner_id=43135)
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_date_range_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/tasks/search"
+            assert params["created_from"] == "2025-01-01"
+            assert params["created_to"] == "2025-06-30"
+            assert params["updated_from"] == "2025-03-01"
+            assert params["updated_to"] == "2025-06-30"
+            return {"data": [{"title": "Task"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_tasks(
+            created_from="2025-01-01",
+            created_to="2025-06-30",
+            updated_from="2025-03-01",
+            updated_to="2025-06-30",
+        )
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_starting_date_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/tasks/search"
+            assert params["starting_from"] == "2025-01-01"
+            assert params["starting_to"] == "2025-12-31"
+            return {"data": [{"title": "Task"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_tasks(
+            starting_from="2025-01-01",
+            starting_to="2025-12-31",
+        )
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_client_side(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"id": i} for i in range(100)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_tasks(limit=3)
+        assert len(results) == 3
+
+    @pytest.mark.anyio
+    async def test_handles_empty_response(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_tasks(title="nonexistent")
+        assert results == []
+
+
+class TestGetTask:
+    @pytest.mark.anyio
+    async def test_fetches_by_id(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/tasks/12345"
+            return {"id": 12345, "title": "Follow up"}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        result = await client.get_task(12345)
+        assert result["id"] == 12345
+
+
 class TestSearchCompanies:
     @pytest.mark.anyio
     async def test_uses_search_endpoint(self, monkeypatch):
