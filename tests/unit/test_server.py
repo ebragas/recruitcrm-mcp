@@ -4,12 +4,14 @@ from recruit_crm_mcp.server import (
     ping,
     __version__,
     _summarize_candidate,
+    _summarize_company,
     _summarize_contact,
     _summarize_job,
     _summarize_meeting,
     _summarize_user,
     _job_location_label,
     get_assigned_candidates,
+    search_companies,
     search_contacts,
     search_meetings,
 )
@@ -125,6 +127,100 @@ class TestSearchContactsTool:
         assert results[0]["slug"] == "contact-123"
         assert results[0]["name"] == "Jane Doe"
         assert results[0]["designation"] == "VP Sales"
+
+
+class TestSummarizeCompany:
+    def test_basic_fields(self):
+        raw = {
+            "slug": "acme-corp",
+            "company_name": "Acme Corp",
+            "about_company": "A great company",
+            "website": "https://acme.com",
+            "city": "Austin",
+            "state": "Texas",
+            "country": "United States",
+            "linkedin": "https://linkedin.com/company/acme",
+            "industry_id": 42,
+            "is_parent_company": 1,
+            "is_child_company": 0,
+        }
+        result = _summarize_company(raw)
+        assert result["slug"] == "acme-corp"
+        assert result["company_name"] == "Acme Corp"
+        assert result["about_company"] == "A great company"
+        assert result["website"] == "https://acme.com"
+        assert result["city"] == "Austin"
+        assert result["state"] == "Texas"
+        assert result["country"] == "United States"
+        assert result["linkedin"] == "https://linkedin.com/company/acme"
+        assert result["industry_id"] == 42
+        assert result["is_parent_company"] == 1
+        assert result["is_child_company"] == 0
+
+    def test_empty_record(self):
+        result = _summarize_company({})
+        assert result["slug"] is None
+        assert result["company_name"] is None
+        assert result["about_company"] is None
+        assert result["website"] is None
+        assert result["city"] is None
+        assert result["state"] is None
+        assert result["country"] is None
+        assert result["linkedin"] is None
+        assert result["industry_id"] is None
+        assert result["is_parent_company"] is None
+        assert result["is_child_company"] is None
+
+
+class TestSearchCompaniesTool:
+    @pytest.mark.anyio
+    async def test_company_slug_short_circuits_to_get(self, monkeypatch):
+        """When company_slug is provided, should call get_company directly."""
+        raw_company = {
+            "slug": "acme-corp",
+            "company_name": "Acme Corp",
+            "website": "https://acme.com",
+        }
+
+        async def mock_get_company(slug):
+            assert slug == "acme-corp"
+            return raw_company
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_company", mock_get_company)
+
+        result = await search_companies(company_slug="acme-corp")
+        assert result == raw_company
+
+    @pytest.mark.anyio
+    async def test_returns_summarized_list(self, monkeypatch):
+        """Without company_slug, should return summarized company list."""
+        mock_data = [
+            {
+                "slug": "acme-corp",
+                "company_name": "Acme Corp",
+                "about_company": "A great company",
+                "website": "https://acme.com",
+                "city": "Austin",
+                "state": "Texas",
+                "country": "US",
+                "linkedin": None,
+                "industry_id": 42,
+                "is_parent_company": 0,
+                "is_child_company": 0,
+            },
+        ]
+
+        async def mock_search(**kwargs):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "search_companies", mock_search)
+
+        results = await search_companies(company_name="Acme")
+        assert len(results) == 1
+        assert results[0]["slug"] == "acme-corp"
+        assert results[0]["company_name"] == "Acme Corp"
 
 
 class TestSummarizeMeeting:
