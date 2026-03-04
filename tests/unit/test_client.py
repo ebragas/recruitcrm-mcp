@@ -8,15 +8,25 @@ import pytest
 from recruit_crm_mcp import client
 
 
-def _make_response(status_code: int, headers: dict | None = None, json_body: dict | None = None) -> httpx.Response:
+def _make_response(
+    status_code: int,
+    headers: dict | None = None,
+    json_body: dict | None = None,
+    method: str = "GET",
+    *,
+    empty_body: bool = False,
+) -> httpx.Response:
     """Build a fake httpx.Response for testing."""
-    resp = httpx.Response(
-        status_code=status_code,
-        headers=headers or {},
-        json=json_body or {},
-        request=httpx.Request("GET", "https://api.recruitcrm.io/v1/test"),
-    )
-    return resp
+    kwargs: dict = {
+        "status_code": status_code,
+        "headers": headers or {},
+        "request": httpx.Request(method, "https://api.recruitcrm.io/v1/test"),
+    }
+    if empty_body:
+        kwargs["content"] = b""
+    else:
+        kwargs["json"] = json_body or {}
+    return httpx.Response(**kwargs)
 
 
 class TestHeaders:
@@ -963,7 +973,7 @@ class TestRateLimitRetry:
         success = _make_response(200, json_body={"data": "ok"})
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=[rate_limited, success])
+        mock_client.request = AsyncMock(side_effect=[rate_limited, success])
         monkeypatch.setattr(client, "_client", mock_client)
 
         with patch("recruit_crm_mcp.client.anyio.sleep") as mock_sleep:
@@ -971,7 +981,7 @@ class TestRateLimitRetry:
 
         mock_sleep.assert_called_once()
         assert result == {"data": "ok"}
-        assert mock_client.get.call_count == 2
+        assert mock_client.request.call_count == 2
 
     @pytest.mark.anyio
     async def test_raises_on_second_429(self, monkeypatch):
@@ -980,7 +990,7 @@ class TestRateLimitRetry:
         rate_limited_2 = _make_response(429, headers={"Retry-After": "0"})
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=[rate_limited_1, rate_limited_2])
+        mock_client.request = AsyncMock(side_effect=[rate_limited_1, rate_limited_2])
         monkeypatch.setattr(client, "_client", mock_client)
 
         with patch("recruit_crm_mcp.client.anyio.sleep"):
@@ -993,12 +1003,12 @@ class TestRateLimitRetry:
         success = _make_response(200, json_body={"ok": True})
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=success)
+        mock_client.request = AsyncMock(return_value=success)
         monkeypatch.setattr(client, "_client", mock_client)
 
         result = await client.get("/test")
         assert result == {"ok": True}
-        assert mock_client.get.call_count == 1
+        assert mock_client.request.call_count == 1
 
     @pytest.mark.anyio
     async def test_non_429_error_raises_immediately(self, monkeypatch):
@@ -1006,12 +1016,12 @@ class TestRateLimitRetry:
         error_resp = _make_response(500)
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=error_resp)
+        mock_client.request = AsyncMock(return_value=error_resp)
         monkeypatch.setattr(client, "_client", mock_client)
 
         with pytest.raises(httpx.HTTPStatusError):
             await client.get("/test")
-        assert mock_client.get.call_count == 1
+        assert mock_client.request.call_count == 1
 
     @pytest.mark.anyio
     async def test_logs_warning_on_429(self, monkeypatch, caplog):
@@ -1020,7 +1030,7 @@ class TestRateLimitRetry:
         success = _make_response(200, json_body={})
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=[rate_limited, success])
+        mock_client.request = AsyncMock(side_effect=[rate_limited, success])
         monkeypatch.setattr(client, "_client", mock_client)
 
         with patch("recruit_crm_mcp.client.anyio.sleep"):
@@ -1029,3 +1039,223 @@ class TestRateLimitRetry:
 
         assert "Rate limited" in caplog.text
         assert "/candidates" in caplog.text
+
+
+class TestRequestBase:
+    """Tests for the shared _request() base method."""
+
+    @pytest.mark.anyio
+    async def test_get_request_sends_auth_headers(self, monkeypatch):
+        """GET request includes Bearer token and Accept header."""
+        success = _make_response(200, json_body={"ok": True})
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        await client._request("GET", "/test")
+
+        call_kwargs = mock_client.request.call_args
+        headers = call_kwargs.kwargs.get("headers") or call_kwargs[1].get("headers")
+        assert headers["Authorization"] == "Bearer test-key-123"
+        assert headers["Accept"] == "application/json"
+
+    @pytest.mark.anyio
+    async def test_post_request_sends_json_body(self, monkeypatch):
+        """POST request sends data as JSON body."""
+        success = _make_response(200, json_body={"id": 1}, method="POST")
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        await client._request("POST", "/candidates", data={"first_name": "Jane"})
+
+        call_kwargs = mock_client.request.call_args
+        assert call_kwargs.kwargs.get("json") == {"first_name": "Jane"}
+
+    @pytest.mark.anyio
+    async def test_delete_request_uses_delete_method(self, monkeypatch):
+        """DELETE request uses correct HTTP method."""
+        success = _make_response(200, method="DELETE", empty_body=True)
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        await client._request("DELETE", "/candidates/slug-123")
+
+        call_args = mock_client.request.call_args
+        assert call_args[0][0] == "DELETE"
+
+    @pytest.mark.anyio
+    async def test_retries_on_429_then_succeeds(self, monkeypatch):
+        """First request returns 429, retry succeeds."""
+        rate_limited = _make_response(429, headers={"Retry-After": "0"})
+        success = _make_response(200, json_body={"data": "ok"})
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(side_effect=[rate_limited, success])
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with patch("recruit_crm_mcp.client.anyio.sleep") as mock_sleep:
+            result = await client._request("GET", "/test")
+
+        mock_sleep.assert_called_once()
+        assert result == {"data": "ok"}
+        assert mock_client.request.call_count == 2
+
+    @pytest.mark.anyio
+    async def test_raises_on_second_429(self, monkeypatch):
+        """Both requests return 429 — raises HTTPStatusError."""
+        rate_limited_1 = _make_response(429, headers={"Retry-After": "0"})
+        rate_limited_2 = _make_response(429, headers={"Retry-After": "0"})
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(side_effect=[rate_limited_1, rate_limited_2])
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with patch("recruit_crm_mcp.client.anyio.sleep"):
+            with pytest.raises(httpx.HTTPStatusError):
+                await client._request("POST", "/test", data={"x": 1})
+
+    @pytest.mark.anyio
+    async def test_logs_warning_on_429(self, monkeypatch, caplog):
+        """Rate limit triggers a warning log message."""
+        rate_limited = _make_response(429, headers={"Retry-After": "0"})
+        success = _make_response(200, json_body={})
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(side_effect=[rate_limited, success])
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with patch("recruit_crm_mcp.client.anyio.sleep"):
+            with caplog.at_level(logging.WARNING, logger="recruit_crm_mcp.client"):
+                await client._request("GET", "/candidates")
+
+        assert "Rate limited" in caplog.text
+        assert "/candidates" in caplog.text
+
+    @pytest.mark.anyio
+    async def test_raises_on_500_immediately(self, monkeypatch):
+        """500 error is not retried — raises immediately."""
+        error_resp = _make_response(500)
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=error_resp)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await client._request("GET", "/test")
+        assert mock_client.request.call_count == 1
+
+
+class TestPost:
+    """Tests for the post() convenience method."""
+
+    @pytest.mark.anyio
+    async def test_sends_json_body(self, monkeypatch):
+        """POST body is forwarded as JSON."""
+        success = _make_response(200, json_body={"id": 42, "first_name": "Jane"}, method="POST")
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        result = await client.post("/candidates", data={"first_name": "Jane"})
+
+        call_kwargs = mock_client.request.call_args
+        assert call_kwargs.kwargs.get("json") == {"first_name": "Jane"}
+        assert result["first_name"] == "Jane"
+
+    @pytest.mark.anyio
+    async def test_returns_json_response(self, monkeypatch):
+        """Response JSON is parsed and returned."""
+        success = _make_response(200, json_body={"id": 1, "slug": "abc"}, method="POST")
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        result = await client.post("/notes", data={"description": "test"})
+        assert result == {"id": 1, "slug": "abc"}
+
+    @pytest.mark.anyio
+    async def test_passes_query_params(self, monkeypatch):
+        """Query params are forwarded on POST."""
+        success = _make_response(200, json_body={"ok": True}, method="POST")
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        await client.post("/test", data={"x": 1}, params={"foo": "bar"})
+
+        call_kwargs = mock_client.request.call_args
+        assert call_kwargs.kwargs.get("params") == {"foo": "bar"}
+
+    @pytest.mark.anyio
+    async def test_retries_on_429(self, monkeypatch):
+        """Rate limit retry works for POST."""
+        rate_limited = _make_response(429, headers={"Retry-After": "0"}, method="POST")
+        success = _make_response(200, json_body={"id": 1}, method="POST")
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(side_effect=[rate_limited, success])
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with patch("recruit_crm_mcp.client.anyio.sleep"):
+            result = await client.post("/candidates", data={"first_name": "Jane"})
+
+        assert result == {"id": 1}
+        assert mock_client.request.call_count == 2
+
+
+class TestDelete:
+    """Tests for the delete() convenience method."""
+
+    @pytest.mark.anyio
+    async def test_calls_correct_endpoint(self, monkeypatch):
+        """DELETE request targets the correct path."""
+        success = _make_response(200, method="DELETE", empty_body=True)
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        await client.delete("/candidates/slug-123")
+
+        call_args = mock_client.request.call_args
+        assert call_args[0][0] == "DELETE"
+        assert "candidates/slug-123" in call_args[0][1]
+
+    @pytest.mark.anyio
+    async def test_handles_empty_response_body(self, monkeypatch):
+        """200 with no JSON body returns None."""
+        success = _make_response(200, method="DELETE", empty_body=True)
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        result = await client.delete("/candidates/slug-123")
+        assert result is None
+
+    @pytest.mark.anyio
+    async def test_handles_json_response(self, monkeypatch):
+        """200 with JSON body returns parsed JSON."""
+        success = _make_response(200, json_body={"deleted": True}, method="DELETE")
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=success)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        result = await client.delete("/notes/123")
+        assert result == {"deleted": True}
+
+    @pytest.mark.anyio
+    async def test_retries_on_429(self, monkeypatch):
+        """Rate limit retry works for DELETE."""
+        rate_limited = _make_response(429, headers={"Retry-After": "0"}, method="DELETE")
+        success = _make_response(200, method="DELETE", empty_body=True)
+
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(side_effect=[rate_limited, success])
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with patch("recruit_crm_mcp.client.anyio.sleep"):
+            result = await client.delete("/candidates/slug-123")
+
+        assert result is None
+        assert mock_client.request.call_count == 2

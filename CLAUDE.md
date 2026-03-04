@@ -121,6 +121,10 @@ uv run <cmd>     # run commands in the venv
 - API key via `RECRUIT_CRM_API_KEY` environment variable
 - **No backward compatibility shims.** This is an MCP server, not a library — there are no external callers. When signatures change, update all internal call sites and delete the old code. Don't add deprecation wrappers or keep dead parameters around.
 
+### Commit Messages
+
+- **Never** add `Co-Authored-By: Claude` or any similar co-author attribution to commit messages, code comments, or anywhere in the codebase.
+
 ### Workflow
 
 1. Create branch with issue ID (e.g., `MAIN-73/scaffold-mcp`) — from `main` or parent feature branch
@@ -129,7 +133,8 @@ uv run <cmd>     # run commands in the venv
 4. Implement, run `make check` to verify
 5. Check off completed subtasks on the Linear issue description
 6. Use `/commit-commands:commit-push-pr` to commit, push, and open a PR
-7. Transition the Linear issue to "In Review"
+7. Request Copilot review: `gh api repos/ebragas/recruitcrm-mcp/pulls/<PR_NUMBER>/requested_reviewers --method POST -f 'reviewers[]=Copilot'`
+8. Transition the Linear issue to "In Review"
 
 ### Test-Driven API Development
 

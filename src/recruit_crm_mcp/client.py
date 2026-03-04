@@ -79,26 +79,55 @@ def _parse_retry_after(resp: httpx.Response) -> float:
     return 10.0
 
 
-async def get(path: str, params: dict[str, Any] | None = None) -> Any:
-    """Make a GET request to the Recruit CRM API.
+async def _request(
+    method: str,
+    path: str,
+    data: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> Any:
+    """Send an HTTP request to the Recruit CRM API.
 
-    Retries once on 429 (rate limited) after waiting for the duration
-    indicated by the response headers.
+    Handles auth headers, rate-limit retry (429), and response parsing.
+    Returns parsed JSON, or ``None`` when the response body is empty.
     """
-    client = _get_client()
+    http = _get_client()
     url = f"{API_BASE}{path}"
-    kwargs = {"headers": _headers(), "params": params, "timeout": 30.0}
+    kwargs: dict[str, Any] = {"headers": _headers(), "params": params, "timeout": 30.0}
+    if data is not None:
+        kwargs["json"] = data
 
-    resp = await client.get(url, **kwargs)
+    resp = await http.request(method, url, **kwargs)
 
     if resp.status_code == 429:
         wait = _parse_retry_after(resp)
         logger.warning("Rate limited on %s — retrying in %.1fs", path, wait)
         await anyio.sleep(wait)
-        resp = await client.get(url, **kwargs)
+        resp = await http.request(method, url, **kwargs)
 
     resp.raise_for_status()
-    return resp.json()
+
+    if resp.content:
+        return resp.json()
+    return None
+
+
+async def get(path: str, params: dict[str, Any] | None = None) -> Any:
+    """Make a GET request to the Recruit CRM API."""
+    return await _request("GET", path, params=params)
+
+
+async def post(
+    path: str,
+    data: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> Any:
+    """Make a POST request to the Recruit CRM API with a JSON body."""
+    return await _request("POST", path, data=data, params=params)
+
+
+async def delete(path: str, params: dict[str, Any] | None = None) -> Any:
+    """Make a DELETE request to the Recruit CRM API."""
+    return await _request("DELETE", path, params=params)
 
 
 def _extract_results(data: Any) -> list[dict]:
