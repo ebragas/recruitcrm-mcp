@@ -9,6 +9,7 @@ from recruit_crm_mcp.server import (
     _summarize_user,
     _job_location_label,
     get_assigned_candidates,
+    get_contact,
     search_contacts,
 )
 
@@ -72,10 +73,10 @@ class TestSummarizeContact:
         assert result["linkedin"] is None
 
 
-class TestSearchContactsTool:
+class TestGetContactTool:
     @pytest.mark.anyio
-    async def test_contact_slug_short_circuits_to_get(self, monkeypatch):
-        """When contact_slug is provided, should call get_contact directly."""
+    async def test_returns_full_record(self, monkeypatch):
+        """get_contact should return the full raw contact record."""
         raw_contact = {
             "slug": "contact-123",
             "first_name": "Jane",
@@ -90,9 +91,11 @@ class TestSearchContactsTool:
         from recruit_crm_mcp import server
         monkeypatch.setattr(server.client, "get_contact", mock_get_contact)
 
-        result = await search_contacts(contact_slug="contact-123")
+        result = await get_contact("contact-123")
         assert result == raw_contact
 
+
+class TestSearchContactsTool:
     @pytest.mark.anyio
     async def test_returns_summarized_list(self, monkeypatch):
         """Without contact_slug, should return summarized contact list."""

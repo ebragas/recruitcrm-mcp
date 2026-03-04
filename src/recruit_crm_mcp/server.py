@@ -157,8 +157,13 @@ async def get_assigned_candidates(
 
 
 @mcp.tool()
+async def get_contact(contact_id: str) -> dict:
+    """Get full details for a specific contact by slug or ID."""
+    return await client.get_contact(contact_id)
+
+
+@mcp.tool()
 async def search_contacts(
-    contact_slug: str | None = None,
     first_name: str | None = None,
     last_name: str | None = None,
     email: str | None = None,
@@ -171,17 +176,13 @@ async def search_contacts(
     updated_to: str | None = None,
     owner_id: int | None = None,
     limit: int = 10,
-) -> list[dict] | dict:
+) -> list[dict]:
     """Search for contacts by name, email, company, or date range.
 
-    If contact_slug is provided, returns the full raw contact record (short-circuits search).
-    Otherwise, provide at least one filter for targeted results. Filters are combined with AND logic.
+    Provide at least one filter for targeted results. Filters are combined with AND logic.
     With no filters, returns a paginated list of recent contacts.
     Date params use YYYY-MM-DD format.
     """
-    if contact_slug:
-        return await client.get_contact(contact_slug)
-
     results = await client.search_contacts(
         first_name=first_name,
         last_name=last_name,
