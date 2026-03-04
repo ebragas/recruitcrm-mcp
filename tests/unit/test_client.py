@@ -163,6 +163,110 @@ class TestSearchCandidates:
 
 
 
+class TestSearchContacts:
+    @pytest.mark.anyio
+    async def test_no_filters_uses_list_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/contacts"
+            assert "limit" in params
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_contacts()
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_email_uses_search_endpoint(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/contacts/search"
+            assert params["email"] == "jane@example.com"
+            return {"data": [{"email": "jane@example.com"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_contacts(email="jane@example.com")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_search_does_not_send_per_page(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert "per_page" not in params
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        await client.search_contacts(first_name="Jane")
+
+    @pytest.mark.anyio
+    async def test_company_slug_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/contacts/search"
+            assert params["company_slug"] == "acme-corp"
+            return {"data": [{"company_slug": "acme-corp"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_contacts(company_slug="acme-corp")
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_owner_id_filter(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/contacts/search"
+            assert params["owner_id"] == 43135
+            return {"data": [{"owner": 43135}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_contacts(owner_id=43135)
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_date_range_filters(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/contacts/search"
+            assert params["created_from"] == "2025-01-01"
+            assert params["created_to"] == "2025-06-30"
+            assert params["updated_from"] == "2025-03-01"
+            assert params["updated_to"] == "2025-06-30"
+            return {"data": [{"first_name": "Jane"}]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_contacts(
+            created_from="2025-01-01",
+            created_to="2025-06-30",
+            updated_from="2025-03-01",
+            updated_to="2025-06-30",
+        )
+        assert len(results) == 1
+
+    @pytest.mark.anyio
+    async def test_enforces_limit_client_side(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": [{"id": i} for i in range(100)]}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_contacts(limit=3)
+        assert len(results) == 3
+
+    @pytest.mark.anyio
+    async def test_handles_empty_response(self, monkeypatch):
+        async def mock_get(path, params=None):
+            return {"data": []}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.search_contacts(first_name="nobody")
+        assert results == []
+
+
+class TestGetContact:
+    @pytest.mark.anyio
+    async def test_fetches_by_slug(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/contacts/jane-doe"
+            return {"first_name": "Jane", "last_name": "Doe"}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        result = await client.get_contact("jane-doe")
+        assert result["first_name"] == "Jane"
+
+
 class TestGetCandidate:
     @pytest.mark.anyio
     async def test_fetches_by_slug(self, monkeypatch):

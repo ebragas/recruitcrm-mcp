@@ -4,10 +4,12 @@ from recruit_crm_mcp.server import (
     ping,
     __version__,
     _summarize_candidate,
+    _summarize_contact,
     _summarize_job,
     _summarize_user,
     _job_location_label,
     get_assigned_candidates,
+    search_contacts,
 )
 
 
@@ -27,6 +29,100 @@ def test_ping_reports_api_key_configured(monkeypatch):
     monkeypatch.setenv("RECRUIT_CRM_API_KEY", "test-key")
     result = ping()
     assert result["api_configured"] is True
+
+
+class TestSummarizeContact:
+    def test_basic_fields(self):
+        raw = {
+            "slug": "contact-123",
+            "first_name": "Jane",
+            "last_name": "Doe",
+            "email": "jane@example.com",
+            "contact_number": "+1234567890",
+            "designation": "VP Sales",
+            "company_slug": "acme-corp",
+            "city": "Austin",
+            "state": "Texas",
+            "country": "United States",
+            "linkedin": "https://linkedin.com/in/janedoe",
+        }
+        result = _summarize_contact(raw)
+        assert result["slug"] == "contact-123"
+        assert result["name"] == "Jane Doe"
+        assert result["email"] == "jane@example.com"
+        assert result["contact_number"] == "+1234567890"
+        assert result["designation"] == "VP Sales"
+        assert result["company_slug"] == "acme-corp"
+        assert result["city"] == "Austin"
+        assert result["state"] == "Texas"
+        assert result["country"] == "United States"
+        assert result["linkedin"] == "https://linkedin.com/in/janedoe"
+
+    def test_empty_record(self):
+        result = _summarize_contact({})
+        assert result["slug"] is None
+        assert result["name"] == ""
+        assert result["email"] is None
+        assert result["contact_number"] is None
+        assert result["designation"] is None
+        assert result["company_slug"] is None
+        assert result["city"] is None
+        assert result["state"] is None
+        assert result["country"] is None
+        assert result["linkedin"] is None
+
+
+class TestSearchContactsTool:
+    @pytest.mark.anyio
+    async def test_contact_slug_short_circuits_to_get(self, monkeypatch):
+        """When contact_slug is provided, should call get_contact directly."""
+        raw_contact = {
+            "slug": "contact-123",
+            "first_name": "Jane",
+            "last_name": "Doe",
+            "email": "jane@example.com",
+        }
+
+        async def mock_get_contact(slug):
+            assert slug == "contact-123"
+            return raw_contact
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "get_contact", mock_get_contact)
+
+        result = await search_contacts(contact_slug="contact-123")
+        assert result == raw_contact
+
+    @pytest.mark.anyio
+    async def test_returns_summarized_list(self, monkeypatch):
+        """Without contact_slug, should return summarized contact list."""
+        mock_data = [
+            {
+                "slug": "contact-123",
+                "first_name": "Jane",
+                "last_name": "Doe",
+                "email": "jane@example.com",
+                "contact_number": "+1234567890",
+                "designation": "VP Sales",
+                "company_slug": "acme-corp",
+                "city": "Austin",
+                "state": "Texas",
+                "country": "US",
+                "linkedin": None,
+            },
+        ]
+
+        async def mock_search(**kwargs):
+            return mock_data
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "search_contacts", mock_search)
+
+        results = await search_contacts(email="jane@example.com")
+        assert len(results) == 1
+        assert results[0]["slug"] == "contact-123"
+        assert results[0]["name"] == "Jane Doe"
+        assert results[0]["designation"] == "VP Sales"
 
 
 class TestSummarizeCandidate:

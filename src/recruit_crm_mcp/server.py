@@ -157,6 +157,49 @@ async def get_assigned_candidates(
 
 
 @mcp.tool()
+async def search_contacts(
+    contact_slug: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    linkedin: str | None = None,
+    contact_number: str | None = None,
+    company_slug: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    updated_from: str | None = None,
+    updated_to: str | None = None,
+    owner_id: int | None = None,
+    limit: int = 10,
+) -> list[dict] | dict:
+    """Search for contacts by name, email, company, or date range.
+
+    If contact_slug is provided, returns the full raw contact record (short-circuits search).
+    Otherwise, provide at least one filter for targeted results. Filters are combined with AND logic.
+    With no filters, returns a paginated list of recent contacts.
+    Date params use YYYY-MM-DD format.
+    """
+    if contact_slug:
+        return await client.get_contact(contact_slug)
+
+    results = await client.search_contacts(
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        linkedin=linkedin,
+        contact_number=contact_number,
+        company_slug=company_slug,
+        created_from=created_from,
+        created_to=created_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        owner_id=owner_id,
+        limit=limit,
+    )
+    return [_summarize_contact(c) for c in results]
+
+
+@mcp.tool()
 async def list_users() -> list[dict]:
     """List all team members/users.
 
@@ -189,6 +232,22 @@ async def job_description(job_id: str) -> str:
     description = data.get("job_description_text") or ""
     title = data.get("name") or "Unknown"
     return f"# {title}\n\n{description}" if description else f"# {title}\n\nNo description available."
+
+
+def _summarize_contact(c: dict) -> dict:
+    """Extract key fields from a contact record for concise display."""
+    return {
+        "slug": c.get("slug"),
+        "name": f"{c.get('first_name', '')} {c.get('last_name', '')}".strip(),
+        "email": c.get("email"),
+        "contact_number": c.get("contact_number"),
+        "designation": c.get("designation"),
+        "company_slug": c.get("company_slug"),
+        "city": c.get("city"),
+        "state": c.get("state"),
+        "country": c.get("country"),
+        "linkedin": c.get("linkedin"),
+    }
 
 
 def _summarize_candidate(c: dict) -> dict:
