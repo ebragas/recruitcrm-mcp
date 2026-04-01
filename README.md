@@ -42,7 +42,7 @@ bash install.sh
 ```powershell
 Invoke-WebRequest -Uri https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.ps1 -OutFile install.ps1
 Get-Content install.ps1   # review the script
-.\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 </details>

@@ -26,14 +26,13 @@ if ($uvx) {
     # Rebuild $env:PATH from the registry so uvx is available immediately.
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:PATH = "$userPath;$machinePath"
+    $env:PATH = "$machinePath;$userPath"
 
     $uvx = Get-Command uvx -ErrorAction SilentlyContinue
     if (-not $uvx) {
         Write-Host ""
-        Write-Host "Error: uv was installed but 'uvx' is not on your PATH."
-        Write-Host "Please restart PowerShell and re-run this script."
-        exit 1
+        Write-Error "uv was installed but 'uvx' is not on your PATH. Please restart PowerShell and re-run this script."
+        return
     }
     Write-Host "✓ uv installed successfully."
 }
