@@ -17,7 +17,7 @@ curl -LsSf https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install
 **Windows** — run in PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.ps1 | iex"
 ```
 
 The installer will:

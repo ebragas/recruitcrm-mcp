@@ -1,5 +1,5 @@
 # Recruit CRM MCP — bootstrap installer for Windows
-# Usage: powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.ps1 | iex"
+# Usage: powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.ps1 | iex"
 #
 # This script:
 #   1. Installs uv (if not already installed)
