@@ -25,7 +25,7 @@ def _find_msix_config_path() -> Path | None:
     if not local_appdata:
         return None
     packages_dir = Path(local_appdata) / "Packages"
-    if not packages_dir.exists():
+    if not packages_dir.is_dir():
         return None
     claude_dirs = [d for d in packages_dir.glob("Claude_*") if d.is_dir()]
     if not claude_dirs:
