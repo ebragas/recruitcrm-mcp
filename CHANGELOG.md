@@ -1,6 +1,40 @@
 # CHANGELOG
 
 
+## v0.14.0 (2026-04-02)
+
+### Bug Fixes
+
+- Address Copilot review feedback
+  ([`326eda7`](https://github.com/ebragas/recruitcrm-mcp/commit/326eda748ee6db46dba00af4311ee31e2b6b3876))
+
+- Swap PATH rebuild to standard Windows order (machine;user) - Replace exit 1 with Write-Error +
+  return to avoid killing host session - Use ExecutionPolicy Bypass in review-first README
+  instructions
+
+- Normalize ExecutionPolicy casing to Bypass
+  ([`604ccba`](https://github.com/ebragas/recruitcrm-mcp/commit/604ccbac9013c6cbd3c8a8887dfb3eb2e69db55a))
+
+- Propagate uvx exit code in install.ps1
+  ([`014ce11`](https://github.com/ebragas/recruitcrm-mcp/commit/014ce1159938e5b46cab0c3b5872807ff1a715ea))
+
+### Chores
+
+- Add .claude/worktrees/ to .gitignore
+  ([`2edee11`](https://github.com/ebragas/recruitcrm-mcp/commit/2edee115c1f8dc2ec515551608dd9d5d0fbdb049))
+
+### Features
+
+- Add Windows one-click install (install.ps1)
+  ([`73b0598`](https://github.com/ebragas/recruitcrm-mcp/commit/73b05984b22bed567a2f757858e618b2ddbd7a06))
+
+Implements MAIN-579: PowerShell bootstrap script that mirrors install.sh for Windows users. Installs
+  uv if missing, refreshes PATH from registry, then delegates to the existing Python installer via
+  uvx.
+
+Updates README with side-by-side macOS/Windows install instructions.
+
+
 ## v0.13.0 (2026-03-04)
 
 ### Bug Fixes
@@ -27,6 +61,9 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Update uv.lock to match pyproject.toml version
   ([`c08ddea`](https://github.com/ebragas/recruitcrm-mcp/commit/c08ddeac3035b4e7f1fc071db03f92459c1d5fff))
+
+- **release**: 0.13.0
+  ([`de3c9bf`](https://github.com/ebragas/recruitcrm-mcp/commit/de3c9bf873224a5ee035b5870ea6f7953ef229fe))
 
 ### Features
 
