@@ -42,3 +42,6 @@ Write-Host ""
 # --- Step 2: Run the interactive installer ---
 
 & uvx --from recruit-crm-mcp recruit-crm-mcp-install
+if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
