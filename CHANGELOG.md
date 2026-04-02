@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.14.1 (2026-04-02)
+
+### Bug Fixes
+
+- Address Copilot review feedback
+  ([`dc54104`](https://github.com/ebragas/recruitcrm-mcp/commit/dc54104db6150915800accd5f8d3f30c5354892e))
+
+- Filter MSIX glob results to directories only (is_dir check) - Make cache-warming best-effort in
+  install.sh (if/else vs set -e abort) - Check $LASTEXITCODE in install.ps1 cache-warming step
+
+- Use is_dir() instead of exists() for Packages dir check
+  ([`f6c0c35`](https://github.com/ebragas/recruitcrm-mcp/commit/f6c0c35cc74ddd5aca5213ba92da6cf29d02bf67))
+
+- **install**: Detect Windows Store config path + pre-cache packages
+  ([`b5a8a0d`](https://github.com/ebragas/recruitcrm-mcp/commit/b5a8a0dd82388f0140d854adba2d0cfad1872947))
+
+Implements MAIN-624: Windows installer: wrong config path + first-run cold-start timeout
+
+- Detect Windows Store (MSIX) sandboxed config path at
+  %LOCALAPPDATA%/Packages/Claude_*/LocalCache/Roaming/Claude/ and prefer it over standard
+  %APPDATA%/Claude/ when present - Add cache-warming step to install.ps1 and install.sh that
+  pre-downloads uvx packages after install, preventing the 60-second timeout on first Claude Desktop
+  launch
+
+
 ## v0.14.0 (2026-04-02)
 
 ### Bug Fixes
@@ -22,6 +47,9 @@
 
 - Add .claude/worktrees/ to .gitignore
   ([`2edee11`](https://github.com/ebragas/recruitcrm-mcp/commit/2edee115c1f8dc2ec515551608dd9d5d0fbdb049))
+
+- **release**: 0.14.0
+  ([`08a371b`](https://github.com/ebragas/recruitcrm-mcp/commit/08a371b48ab619bae59dfbb289a59f442e2c8a18))
 
 ### Features
 
