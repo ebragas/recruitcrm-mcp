@@ -8,18 +8,16 @@ MCP (Model Context Protocol) server for [Recruit CRM](https://www.recruitcrm.io/
 
 ### One-Click Install (recommended)
 
-Run this in your terminal — it handles everything automatically:
+**macOS / Linux** — run in Terminal:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.sh | bash
 ```
 
-Or download and review the script first:
+**Windows** — run in PowerShell:
 
-```bash
-curl -LsSf https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.sh -o install.sh
-cat install.sh   # review the script
-bash install.sh
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.ps1 | iex"
 ```
 
 The installer will:
@@ -28,8 +26,29 @@ The installer will:
 - Back up your existing Claude Desktop config
 - Add the Recruit CRM MCP server entry
 
+<details>
+<summary>Want to review the script first?</summary>
+
+**macOS / Linux:**
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.sh -o install.sh
+cat install.sh   # review the script
+bash install.sh
+```
+
+**Windows:**
+
+```powershell
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/ebragas/recruitcrm-mcp/main/install.ps1 -OutFile install.ps1
+Get-Content install.ps1   # review the script
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+</details>
+
 > Already have `uv`? You can skip the bootstrap and run the installer directly:
-> ```bash
+> ```
 > uvx --from recruit-crm-mcp recruit-crm-mcp-install
 > ```
 

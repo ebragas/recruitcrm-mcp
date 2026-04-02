@@ -1,7 +1,120 @@
 # CHANGELOG
 
 
+## v0.14.1 (2026-04-02)
+
+### Bug Fixes
+
+- Address Copilot review feedback
+  ([`dc54104`](https://github.com/ebragas/recruitcrm-mcp/commit/dc54104db6150915800accd5f8d3f30c5354892e))
+
+- Filter MSIX glob results to directories only (is_dir check) - Make cache-warming best-effort in
+  install.sh (if/else vs set -e abort) - Check $LASTEXITCODE in install.ps1 cache-warming step
+
+- Use is_dir() instead of exists() for Packages dir check
+  ([`f6c0c35`](https://github.com/ebragas/recruitcrm-mcp/commit/f6c0c35cc74ddd5aca5213ba92da6cf29d02bf67))
+
+- **install**: Detect Windows Store config path + pre-cache packages
+  ([`b5a8a0d`](https://github.com/ebragas/recruitcrm-mcp/commit/b5a8a0dd82388f0140d854adba2d0cfad1872947))
+
+Implements MAIN-624: Windows installer: wrong config path + first-run cold-start timeout
+
+- Detect Windows Store (MSIX) sandboxed config path at
+  %LOCALAPPDATA%/Packages/Claude_*/LocalCache/Roaming/Claude/ and prefer it over standard
+  %APPDATA%/Claude/ when present - Add cache-warming step to install.ps1 and install.sh that
+  pre-downloads uvx packages after install, preventing the 60-second timeout on first Claude Desktop
+  launch
+
+
+## v0.14.0 (2026-04-02)
+
+### Bug Fixes
+
+- Address Copilot review feedback
+  ([`326eda7`](https://github.com/ebragas/recruitcrm-mcp/commit/326eda748ee6db46dba00af4311ee31e2b6b3876))
+
+- Swap PATH rebuild to standard Windows order (machine;user) - Replace exit 1 with Write-Error +
+  return to avoid killing host session - Use ExecutionPolicy Bypass in review-first README
+  instructions
+
+- Normalize ExecutionPolicy casing to Bypass
+  ([`604ccba`](https://github.com/ebragas/recruitcrm-mcp/commit/604ccbac9013c6cbd3c8a8887dfb3eb2e69db55a))
+
+- Propagate uvx exit code in install.ps1
+  ([`014ce11`](https://github.com/ebragas/recruitcrm-mcp/commit/014ce1159938e5b46cab0c3b5872807ff1a715ea))
+
+### Chores
+
+- Add .claude/worktrees/ to .gitignore
+  ([`2edee11`](https://github.com/ebragas/recruitcrm-mcp/commit/2edee115c1f8dc2ec515551608dd9d5d0fbdb049))
+
+- **release**: 0.14.0
+  ([`08a371b`](https://github.com/ebragas/recruitcrm-mcp/commit/08a371b48ab619bae59dfbb289a59f442e2c8a18))
+
+### Features
+
+- Add Windows one-click install (install.ps1)
+  ([`73b0598`](https://github.com/ebragas/recruitcrm-mcp/commit/73b05984b22bed567a2f757858e618b2ddbd7a06))
+
+Implements MAIN-579: PowerShell bootstrap script that mirrors install.sh for Windows users. Installs
+  uv if missing, refreshes PATH from registry, then delegates to the existing Python installer via
+  uvx.
+
+Updates README with side-by-side macOS/Windows install instructions.
+
+
+## v0.13.0 (2026-03-04)
+
+### Bug Fixes
+
+- Use correct Copilot reviewer name in workflow and skill
+  ([`5617d92`](https://github.com/ebragas/recruitcrm-mcp/commit/5617d9225261c82d4c92867282d9d78013b49938))
+
+The API requires `reviewers[]=Copilot` not `copilot-pull-request-reviewer`.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Chores
+
+- Add rule to never include Co-Authored-By Claude in commits
+  ([`1b145a5`](https://github.com/ebragas/recruitcrm-mcp/commit/1b145a50826cf2c49bd3ce0a58cba6d08c12dac6))
+
+- Auto-request Copilot review in workflow and PR comments skill
+  ([`e07df48`](https://github.com/ebragas/recruitcrm-mcp/commit/e07df48f8d145ed90008f4241de70754c46ef443))
+
+Add Copilot review request step to the workflow in CLAUDE.md and ensure the review-pr-comments skill
+  always re-requests Copilot review after pushing fixes.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- Update uv.lock to match pyproject.toml version
+  ([`c08ddea`](https://github.com/ebragas/recruitcrm-mcp/commit/c08ddeac3035b4e7f1fc071db03f92459c1d5fff))
+
+- **release**: 0.13.0
+  ([`de3c9bf`](https://github.com/ebragas/recruitcrm-mcp/commit/de3c9bf873224a5ee035b5870ea6f7953ef229fe))
+
+### Features
+
+- **client**: Add POST and DELETE support to HTTP client
+  ([`119e117`](https://github.com/ebragas/recruitcrm-mcp/commit/119e117712eb9d5be1e7bbd74f6bcbbc9af4d105))
+
+Extract shared _request() base method from get() to DRY up auth, rate-limit retry, and error
+  handling. Add post() and delete() convenience wrappers.
+
+The Recruit CRM API uses POST for both create and edit operations (not PUT/PATCH), so only post()
+  and delete() are needed.
+
+MAIN-170
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.12.0 (2026-03-04)
+
+### Chores
+
+- **release**: 0.12.0
+  ([`02a2e6a`](https://github.com/ebragas/recruitcrm-mcp/commit/02a2e6a53811e88db5a2e19ea666da135d979fec))
 
 ### Features
 
