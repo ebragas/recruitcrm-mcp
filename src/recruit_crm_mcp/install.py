@@ -14,6 +14,31 @@ from pathlib import Path
 MCP_SERVER_ARGS = ["recruit-crm-mcp"]
 
 
+def _find_msix_config_path() -> Path | None:
+    """Return the Claude Desktop config path for Windows Store (MSIX) installs.
+
+    Windows Store apps run in a sandboxed environment where %APPDATA% is
+    virtualized to %LOCALAPPDATA%/Packages/<package>/LocalCache/Roaming/.
+    External processes must write to the sandboxed path directly.
+    """
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+    packages_dir = Path(local_appdata) / "Packages"
+    if not packages_dir.exists():
+        return None
+    claude_dirs = list(packages_dir.glob("Claude_*"))
+    if not claude_dirs:
+        return None
+    return (
+        claude_dirs[0]
+        / "LocalCache"
+        / "Roaming"
+        / "Claude"
+        / "claude_desktop_config.json"
+    )
+
+
 def get_config_path() -> Path:
     """Return the path to claude_desktop_config.json for the current OS."""
     system = platform.system()
@@ -26,6 +51,11 @@ def get_config_path() -> Path:
             / "claude_desktop_config.json"
         )
     if system == "Windows":
+        # Windows Store (MSIX) installs use a sandboxed config path
+        msix_path = _find_msix_config_path()
+        if msix_path:
+            return msix_path
+        # Fall back to standard (direct installer) path
         appdata = os.environ.get("APPDATA", "")
         if not appdata:
             raise SystemExit("Error: APPDATA environment variable is not set.")
