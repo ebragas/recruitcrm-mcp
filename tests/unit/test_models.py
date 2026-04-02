@@ -423,6 +423,14 @@ class TestNoteCreate:
                 bogus_field="nope",
             )
 
+    def test_invalid_related_to_type_raises(self):
+        with pytest.raises(ValidationError):
+            NoteCreate(
+                description="A note",
+                related_to="cand-123",
+                related_to_type="bogus",
+            )
+
     def test_model_dump_exclude_none(self):
         m = NoteCreate(
             description="A note",
