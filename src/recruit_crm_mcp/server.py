@@ -144,7 +144,7 @@ async def get_job(job_id: str) -> dict:
 
 @mcp.tool()
 async def get_assigned_candidates(
-    job_id: str,
+    job_slug: str,
     status_id: str | None = None,
     limit: int = 25,
 ) -> list[AssignedCandidateSummary]:
@@ -154,7 +154,7 @@ async def get_assigned_candidates(
     Use status_id to filter by a specific hiring stage.
     """
     results = await client.get_assigned_candidates(
-        job_slug=job_id,
+        job_slug=job_slug,
         status_id=status_id,
         limit=limit,
     )
