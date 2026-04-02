@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.15.0 (2026-04-02)
+
+### Bug Fixes
+
+- Rename job_id to job_slug in get_assigned_candidates for consistency
+  ([`2e82934`](https://github.com/ebragas/recruitcrm-mcp/commit/2e82934d1d73e3afc276dfb56446b4262e1d3f16))
+
+The parameter was named job_id but passed as job_slug to the client, which was misleading. Renamed
+  to match the client API and underlying endpoint path (/jobs/{job_slug}/assigned-candidates).
+
+### Testing
+
+- Add Literal validation tests for TaskCreate and MeetingCreate
+  ([`df8aff5`](https://github.com/ebragas/recruitcrm-mcp/commit/df8aff516fc71650060e82b164f5a1812071ff34))
+
+
 ## v0.14.1 (2026-04-02)
 
 ### Bug Fixes
@@ -24,6 +40,11 @@ Implements MAIN-624: Windows installer: wrong config path + first-run cold-start
   %APPDATA%/Claude/ when present - Add cache-warming step to install.ps1 and install.sh that
   pre-downloads uvx packages after install, preventing the 60-second timeout on first Claude Desktop
   launch
+
+### Chores
+
+- **release**: 0.14.1
+  ([`1e2ed2e`](https://github.com/ebragas/recruitcrm-mcp/commit/1e2ed2e27bbfc79654805e62c8963e03b870695d))
 
 
 ## v0.14.0 (2026-04-02)
@@ -67,6 +88,13 @@ Updates README with side-by-side macOS/Windows install instructions.
 
 ### Bug Fixes
 
+- Add pydantic as explicit dep + test invalid related_to_type
+  ([`c0a0fae`](https://github.com/ebragas/recruitcrm-mcp/commit/c0a0fae8d06cdc7bcefb7d1100d2523f1c3ac1da))
+
+- Add pydantic>=2.0.0 to pyproject.toml dependencies (was only available as transitive dep via
+  fastmcp) - Add test_invalid_related_to_type_raises to verify Literal constraint enforcement on
+  NoteCreate
+
 - Use correct Copilot reviewer name in workflow and skill
   ([`5617d92`](https://github.com/ebragas/recruitcrm-mcp/commit/5617d9225261c82d4c92867282d9d78013b49938))
 
@@ -94,6 +122,15 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
   ([`de3c9bf`](https://github.com/ebragas/recruitcrm-mcp/commit/de3c9bf873224a5ee035b5870ea6f7953ef229fe))
 
 ### Features
+
+- Add Pydantic models for API entities, replace _summarize_* functions
+  ([`7f93f7f`](https://github.com/ebragas/recruitcrm-mcp/commit/7f93f7f7770b143457a100557a5775e6b79cff90))
+
+Introduce structured Pydantic models for all Recruit CRM API entities: - 9 summary models with
+  from_api_response() classmethods replacing ad-hoc _summarize_* dict functions in server.py - 6
+  input models (extra="forbid") for future write operations - Comprehensive test coverage (53 model
+  tests) - Updated server.py return types from list[dict] to list[ModelType] - Updated all test
+  assertions from dict access to attribute access
 
 - **client**: Add POST and DELETE support to HTTP client
   ([`119e117`](https://github.com/ebragas/recruitcrm-mcp/commit/119e117712eb9d5be1e7bbd74f6bcbbc9af4d105))
