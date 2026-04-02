@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from recruit_crm_mcp.install import (
+    _find_msix_config_path,
     backup_config,
     find_uvx,
     inject_server,
@@ -126,6 +127,34 @@ class TestWriteConfig:
 
 
 
+class TestFindMsixConfigPath:
+    def test_no_localappdata(self):
+        with patch.dict("os.environ", {}, clear=True):
+            assert _find_msix_config_path() is None
+
+    def test_no_packages_dir(self, tmp_path: Path):
+        with patch.dict("os.environ", {"LOCALAPPDATA": str(tmp_path)}):
+            # No Packages directory exists
+            assert _find_msix_config_path() is None
+
+    def test_no_claude_package(self, tmp_path: Path):
+        packages_dir = tmp_path / "Packages"
+        packages_dir.mkdir()
+        with patch.dict("os.environ", {"LOCALAPPDATA": str(tmp_path)}):
+            assert _find_msix_config_path() is None
+
+    def test_msix_path_found(self, tmp_path: Path):
+        packages_dir = tmp_path / "Packages"
+        claude_pkg = packages_dir / "Claude_pzs8sxrjxfjjc"
+        claude_pkg.mkdir(parents=True)
+        with patch.dict("os.environ", {"LOCALAPPDATA": str(tmp_path)}):
+            result = _find_msix_config_path()
+            assert result is not None
+            assert "LocalCache" in str(result)
+            assert "Roaming" in str(result)
+            assert result.name == "claude_desktop_config.json"
+
+
 class TestGetConfigPath:
     def test_mac(self):
         with patch("recruit_crm_mcp.install.platform.system", return_value="Darwin"):
@@ -135,16 +164,57 @@ class TestGetConfigPath:
             assert "Application Support" in str(path)
             assert path.name == "claude_desktop_config.json"
 
-    def test_windows(self):
+    def test_windows_standard(self):
         with (
             patch("recruit_crm_mcp.install.platform.system", return_value="Windows"),
+            patch(
+                "recruit_crm_mcp.install._find_msix_config_path", return_value=None
+            ),
             patch.dict("os.environ", {"APPDATA": "C:\\Users\\test\\AppData\\Roaming"}),
         ):
             from recruit_crm_mcp.install import get_config_path
 
             path = get_config_path()
-            assert "Claude" in str(path)
+            assert "Roaming" in str(path)
             assert path.name == "claude_desktop_config.json"
+
+    def test_windows_msix(self, tmp_path: Path):
+        msix_path = (
+            tmp_path
+            / "Packages"
+            / "Claude_abc123"
+            / "LocalCache"
+            / "Roaming"
+            / "Claude"
+            / "claude_desktop_config.json"
+        )
+        with (
+            patch("recruit_crm_mcp.install.platform.system", return_value="Windows"),
+            patch(
+                "recruit_crm_mcp.install._find_msix_config_path",
+                return_value=msix_path,
+            ),
+        ):
+            from recruit_crm_mcp.install import get_config_path
+
+            path = get_config_path()
+            assert path == msix_path
+
+    def test_windows_msix_preferred_over_standard(self, tmp_path: Path):
+        """MSIX path takes precedence when Windows Store install is detected."""
+        msix_path = tmp_path / "msix" / "claude_desktop_config.json"
+        with (
+            patch("recruit_crm_mcp.install.platform.system", return_value="Windows"),
+            patch(
+                "recruit_crm_mcp.install._find_msix_config_path",
+                return_value=msix_path,
+            ),
+            patch.dict("os.environ", {"APPDATA": "C:\\Users\\test\\AppData\\Roaming"}),
+        ):
+            from recruit_crm_mcp.install import get_config_path
+
+            path = get_config_path()
+            assert path == msix_path
 
     def test_unsupported_os(self):
         with patch("recruit_crm_mcp.install.platform.system", return_value="Linux"):

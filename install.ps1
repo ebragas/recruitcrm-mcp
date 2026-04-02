@@ -45,3 +45,18 @@ Write-Host ""
 if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
+
+Write-Host ""
+
+# --- Step 3: Pre-cache packages for Claude Desktop ---
+# Claude Desktop launches the server via `uvx recruit-crm-mcp`. On first run,
+# uvx must download ~70 packages which can exceed the 60-second init timeout.
+# Warm the cache now so the first Claude Desktop launch is fast.
+
+Write-Host "Pre-caching packages for fast startup..."
+& uvx --from recruit-crm-mcp python -c "print('ok')" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
+    Write-Warning "Package pre-caching failed. Claude Desktop may be slower on first launch."
+} else {
+    Write-Host "✓ Packages cached. Claude Desktop will start quickly."
+}
