@@ -54,5 +54,8 @@ echo
 # Warm the cache now so the first Claude Desktop launch is fast.
 
 echo "Pre-caching packages for fast startup..."
-uvx --from recruit-crm-mcp python -c "print('ok')" > /dev/null 2>&1
-echo "✓ Packages cached. Claude Desktop will start quickly."
+if uvx --from recruit-crm-mcp python -c "print('ok')" > /dev/null 2>&1; then
+    echo "✓ Packages cached. Claude Desktop will start quickly."
+else
+    echo "Warning: Failed to pre-cache packages. Claude Desktop may be slower on first launch."
+fi

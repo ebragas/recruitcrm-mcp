@@ -55,4 +55,8 @@ Write-Host ""
 
 Write-Host "Pre-caching packages for fast startup..."
 & uvx --from recruit-crm-mcp python -c "print('ok')" 2>&1 | Out-Null
-Write-Host "✓ Packages cached. Claude Desktop will start quickly."
+if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
+    Write-Warning "Package pre-caching failed. Claude Desktop may be slower on first launch."
+} else {
+    Write-Host "✓ Packages cached. Claude Desktop will start quickly."
+}
