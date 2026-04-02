@@ -479,6 +479,16 @@ class TestTaskCreate:
                 bogus_field="nope",
             )
 
+    def test_invalid_related_to_type_raises(self):
+        with pytest.raises(ValidationError):
+            TaskCreate(
+                title="Follow up",
+                reminder=-1,
+                start_date="2025-04-29",
+                related_to="cand-123",
+                related_to_type="bogus",
+            )
+
     def test_model_dump_exclude_none(self):
         m = TaskCreate(title="Follow up", reminder=-1, start_date="2025-04-29")
         d = m.model_dump(exclude_none=True)
@@ -530,6 +540,17 @@ class TestMeetingCreate:
                 start_date="2025-04-29T18:30:00",
                 end_date="2025-04-29T19:00:00",
                 bogus_field="nope",
+            )
+
+    def test_invalid_related_to_type_raises(self):
+        with pytest.raises(ValidationError):
+            MeetingCreate(
+                title="Interview",
+                reminder=0,
+                start_date="2025-04-29T18:30:00",
+                end_date="2025-04-29T19:00:00",
+                related_to="cand-123",
+                related_to_type="bogus",
             )
 
     def test_model_dump_exclude_none(self):
