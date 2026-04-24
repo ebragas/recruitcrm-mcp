@@ -1292,10 +1292,50 @@ class TestWrites:
             assert fetched["id"] == task_id
             assert fetched.get("title") == "MCP integration test task"
 
-            # update_task round-trip — mark complete
-            updated = await client.update_task(task_id, {"status": "c"})
+            # update_task round-trip — change the description
+            updated = await client.update_task(task_id, {"description": "updated"})
             assert updated.get("id") == task_id
-            assert updated.get("status") == "c"
+            fetched = await client.get_task(task_id)
+            assert fetched.get("description") == "updated"
+        finally:
+            await client.delete(f"/tasks/{task_id}")
+
+    async def test_update_task_preserves_omitted_fields(self, test_candidate):
+        """Partial update should preserve fields not in the patch.
+
+        Creates a task with 5 fields, updates only ``description``, asserts all
+        other fields survive. Per edit-task.md every body field is optional, so
+        the API is expected to support true partial updates.
+        """
+        payload = {
+            "title": "MCP preserve-test task",
+            "description": "original description",
+            "start_date": "2030-01-01T09:00:00Z",
+            "reminder": 1440,
+            "related_to": test_candidate,
+            "related_to_type": "candidate",
+        }
+        created = await client.create_task(payload)
+        task_id = created.get("id")
+        assert task_id, f"create failed: {created!r}"
+        try:
+            await client.update_task(task_id, {"description": "patched description"})
+            fetched = await client.get_task(task_id)
+            assert fetched.get("description") == "patched description", (
+                f"description not updated: {fetched.get('description')!r}"
+            )
+            assert fetched.get("title") == "MCP preserve-test task", (
+                f"title not preserved: {fetched.get('title')!r}"
+            )
+            assert fetched.get("related_to") == test_candidate, (
+                f"related_to not preserved: {fetched.get('related_to')!r}"
+            )
+            assert fetched.get("related_to_type") == "candidate", (
+                f"related_to_type not preserved: {fetched.get('related_to_type')!r}"
+            )
+            assert fetched.get("reminder") == 1440, (
+                f"reminder not preserved: {fetched.get('reminder')!r}"
+            )
         finally:
             await client.delete(f"/tasks/{task_id}")
 

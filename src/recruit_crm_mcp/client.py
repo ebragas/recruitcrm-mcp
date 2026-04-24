@@ -26,10 +26,6 @@ class RecruitCrmError(RuntimeError):
         super().__init__(f"{method} {path} -> {status}: {body!r}")
 
 
-_UPDATE_STRIP_KEYS = frozenset(
-    {"id", "slug", "created_on", "updated_on", "created_by", "updated_by", "resource_url"}
-)
-
 API_BASE = "https://api.recruitcrm.io/v1"
 
 _client: httpx.AsyncClient | None = None
@@ -213,31 +209,6 @@ def _associations_to_payload(associated: Any) -> dict[str, str]:
         "associated_deals": associated.deals,
     }
     return {k: joined for k, v in pairs.items() if (joined := _join(v)) is not None}
-
-
-async def _fetch_merge_post(path: str, patch: dict[str, Any]) -> Any:
-    """Fetch-merge-POST pattern for update endpoints.
-
-    GETs the current record, drops keys that shouldn't round-trip
-    (id/slug/created_on/updated_on/created_by/updated_by/resource_url),
-    applies ``patch`` (non-None values only), POSTs the merged body.
-
-    Required because some tenant configs have endpoints that silently
-    blank fields when omitted from a partial POST.
-    """
-    current = await get(path)
-    if not isinstance(current, dict):
-        raise RecruitCrmError(
-            500,
-            f"Expected dict from GET {path}, got {type(current).__name__}",
-            "GET",
-            path,
-        )
-    merged = {k: v for k, v in current.items() if k not in _UPDATE_STRIP_KEYS}
-    for k, v in patch.items():
-        if v is not None:
-            merged[k] = v
-    return await post(path, merged)
 
 
 async def search_candidates(
@@ -770,11 +741,17 @@ async def create_task(payload: dict[str, Any]) -> dict:
 
 
 async def update_task(task_id: int, patch: dict[str, Any]) -> dict:
-    """GET /tasks/{id} → merge patch → POST /tasks/{id}. See edit-task.md.
+    """POST /tasks/{id} — partial update. See edit-task.md.
 
-    Uses ``_fetch_merge_post`` to avoid silently blanking omitted fields.
+    Per edit-task.md every body field is optional; the API preserves fields
+    omitted from the payload. Non-None values in ``patch`` are sent as-is.
+    Fetch-merge-POST was tried earlier but re-posting the read shape (e.g.
+    ``task_type`` as nested object, ``associated_*`` as arrays) yields 422
+    because the edit endpoint expects scalar ``task_type_id``/``owner_id``
+    and comma-separated ``associated_*`` strings.
     """
-    result = await _fetch_merge_post(f"/tasks/{task_id}", patch)
+    clean = {k: v for k, v in patch.items() if v is not None}
+    result = await post(f"/tasks/{task_id}", clean)
     return result or {}
 
 
@@ -789,12 +766,17 @@ async def create_company(payload: dict[str, Any]) -> dict:
 
 
 async def update_company(company_slug: str, patch: dict[str, Any]) -> dict:
-    """GET /companies/{slug} → merge → POST /companies/{slug}.
+    """POST /companies/{slug} — partial update. See edit-a-company.md.
 
-    Uses ``_fetch_merge_post`` so the required ``company_name`` is preserved
-    when not explicitly set in the patch.
+    Per edit-a-company.md every body field is optional in practice; the API
+    preserves fields omitted from the payload. Non-None values in ``patch``
+    are sent as-is. Fetch-merge-POST was tried earlier but re-posting the
+    read shape yields 422 because the edit endpoint expects scalar IDs
+    (e.g. ``owner_id``) and comma-separated string keys, not the nested
+    objects returned by GET.
     """
-    result = await _fetch_merge_post(f"/companies/{company_slug}", patch)
+    clean = {k: v for k, v in patch.items() if v is not None}
+    result = await post(f"/companies/{company_slug}", clean)
     return result or {}
 
 
@@ -804,8 +786,17 @@ async def create_contact(payload: dict[str, Any]) -> dict:
 
 
 async def update_contact(contact_slug: str, patch: dict[str, Any]) -> dict:
-    """GET /contacts/{slug} → merge → POST /contacts/{slug}."""
-    result = await _fetch_merge_post(f"/contacts/{contact_slug}", patch)
+    """POST /contacts/{slug} — partial update. See edit-a-contact.md.
+
+    Per edit-a-contact.md every body field is optional; the API preserves
+    fields omitted from the payload. Non-None values in ``patch`` are sent
+    as-is. Fetch-merge-POST was tried earlier but re-posting the read shape
+    yields 422 because the edit endpoint expects scalar ``owner_id``/
+    ``stage_id`` and comma-separated ``company_slug`` rather than the nested
+    objects/arrays returned by GET.
+    """
+    clean = {k: v for k, v in patch.items() if v is not None}
+    result = await post(f"/contacts/{contact_slug}", clean)
     return result or {}
 
 
@@ -815,8 +806,17 @@ async def create_job(payload: dict[str, Any]) -> dict:
 
 
 async def update_job(job_slug: str, patch: dict[str, Any]) -> dict:
-    """GET /jobs/{slug} → merge → POST /jobs/{slug}."""
-    result = await _fetch_merge_post(f"/jobs/{job_slug}", patch)
+    """POST /jobs/{slug} — partial update. See edit-a-job.md.
+
+    Per edit-a-job.md every body field is optional; the API preserves fields
+    omitted from the payload. Non-None values in ``patch`` are sent as-is.
+    Fetch-merge-POST was tried earlier but re-posting the read shape yields
+    422 because the edit endpoint expects scalar ``job_status``/``owner_id``
+    and comma-separated ``collaborator_*`` strings rather than the nested
+    objects/arrays returned by GET.
+    """
+    clean = {k: v for k, v in patch.items() if v is not None}
+    result = await post(f"/jobs/{job_slug}", clean)
     return result or {}
 
 
@@ -826,12 +826,17 @@ async def create_candidate(payload: dict[str, Any]) -> dict:
 
 
 async def update_candidate(candidate_slug: str, patch: dict[str, Any]) -> dict:
-    """GET /candidates/{slug} → merge → POST /candidates/{slug}.
+    """POST /candidates/{slug} — partial update. See edit-a-candidate.md.
 
-    Uses ``_fetch_merge_post`` so the required ``first_name`` is preserved
-    when not explicitly set in the patch.
+    Per edit-a-candidate.md every body field is optional; the API preserves
+    fields omitted from the payload. Non-None values in ``patch`` are sent
+    as-is. Fetch-merge-POST was tried earlier but re-posting the read shape
+    yields 422 because the edit endpoint expects scalar ``owner_id`` and
+    other write-shape keys rather than the nested objects (e.g. ``resume``,
+    ``current_organization``) returned by GET.
     """
-    result = await _fetch_merge_post(f"/candidates/{candidate_slug}", patch)
+    clean = {k: v for k, v in patch.items() if v is not None}
+    result = await post(f"/candidates/{candidate_slug}", clean)
     return result or {}
 
 
@@ -841,8 +846,17 @@ async def update_candidate(candidate_slug: str, patch: dict[str, Any]) -> dict:
 
 
 async def update_meeting(meeting_id: int, patch: dict[str, Any]) -> dict:
-    """GET /meetings/{id} → merge → POST /meetings/{id}."""
-    result = await _fetch_merge_post(f"/meetings/{meeting_id}", patch)
+    """POST /meetings/{id} — partial update. See edit-meeting.md.
+
+    Per edit-meeting.md every body field is optional; the API preserves
+    fields omitted from the payload. Non-None values in ``patch`` are sent
+    as-is. Fetch-merge-POST was tried earlier but re-posting the read shape
+    yields 422 because the edit endpoint expects scalar ``meeting_type_id``/
+    ``owner_id`` and comma-separated ``associated_*`` strings rather than
+    the nested objects/arrays returned by GET.
+    """
+    clean = {k: v for k, v in patch.items() if v is not None}
+    result = await post(f"/meetings/{meeting_id}", clean)
     return result or {}
 
 

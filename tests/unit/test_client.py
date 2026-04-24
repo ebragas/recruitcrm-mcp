@@ -1352,91 +1352,6 @@ class TestJoin:
         assert client._join(["a", "b", "c"]) == "a,b,c"
 
 
-class TestFetchMergePost:
-    """Tests for the _fetch_merge_post helper."""
-
-    @pytest.mark.anyio
-    async def test_happy_path_strips_keys_and_applies_patch(self, monkeypatch):
-        """Merged body omits id/slug and applies the patch, preserving other fields."""
-        current = {
-            "id": 5,
-            "slug": "x",
-            "title": "old",
-            "description": "d",
-            "status": "o",
-        }
-
-        async def mock_get(path, params=None):
-            assert path == "/notes/5"
-            return current
-
-        posted: dict = {}
-
-        async def mock_post(path, data=None, params=None):
-            posted["path"] = path
-            posted["data"] = data
-            return {"id": 5, "slug": "x", **data}
-
-        monkeypatch.setattr(client, "get", mock_get)
-        monkeypatch.setattr(client, "post", mock_post)
-
-        result = await client._fetch_merge_post("/notes/5", {"status": "c"})
-
-        assert posted["path"] == "/notes/5"
-        assert "id" not in posted["data"]
-        assert "slug" not in posted["data"]
-        assert posted["data"]["status"] == "c"
-        assert posted["data"]["description"] == "d"
-        assert posted["data"]["title"] == "old"
-        assert result["status"] == "c"
-
-    @pytest.mark.anyio
-    async def test_patch_with_none_values_is_ignored(self, monkeypatch):
-        """None values in patch should not overwrite existing fields."""
-        current = {
-            "id": 5,
-            "slug": "x",
-            "title": "old",
-            "status": "o",
-        }
-
-        async def mock_get(path, params=None):
-            return current
-
-        posted: dict = {}
-
-        async def mock_post(path, data=None, params=None):
-            posted["data"] = data
-            return {**data}
-
-        monkeypatch.setattr(client, "get", mock_get)
-        monkeypatch.setattr(client, "post", mock_post)
-
-        await client._fetch_merge_post("/notes/5", {"title": None, "status": "c"})
-
-        assert posted["data"]["title"] == "old"
-        assert posted["data"]["status"] == "c"
-
-    @pytest.mark.anyio
-    async def test_get_returning_non_dict_raises(self, monkeypatch):
-        """If GET doesn't return a dict, raise RecruitCrmError."""
-        async def mock_get(path, params=None):
-            return [{"id": 1}]
-
-        async def mock_post(path, data=None, params=None):
-            raise AssertionError("post should not be called")
-
-        monkeypatch.setattr(client, "get", mock_get)
-        monkeypatch.setattr(client, "post", mock_post)
-
-        with pytest.raises(client.RecruitCrmError) as exc_info:
-            await client._fetch_merge_post("/notes/5", {"status": "c"})
-
-        assert exc_info.value.status == 500
-        assert exc_info.value.method == "GET"
-        assert exc_info.value.path == "/notes/5"
-
-
 class TestListNoteTypes:
     @pytest.mark.anyio
     async def test_happy_path(self, monkeypatch):
@@ -1707,29 +1622,42 @@ class TestCreateTask:
 
 class TestUpdateTask:
     @pytest.mark.anyio
-    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+    async def test_partial_post_to_task_endpoint(self, monkeypatch):
         captured: dict = {}
 
-        async def mock_fmp(path, patch):
+        async def mock_post(path, data=None, params=None):
             captured["path"] = path
-            captured["patch"] = patch
-            return {"id": 42, "status": patch.get("status")}
+            captured["data"] = data
+            return {"id": 42, "title": data.get("title")}
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
-        result = await client.update_task(42, {"status": "c"})
+        monkeypatch.setattr(client, "post", mock_post)
+        result = await client.update_task(42, {"title": "new title"})
 
         assert captured["path"] == "/tasks/42"
-        assert captured["patch"] == {"status": "c"}
+        assert captured["data"] == {"title": "new title"}
         assert result["id"] == 42
-        assert result["status"] == "c"
 
     @pytest.mark.anyio
-    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
-        async def mock_fmp(path, patch):
+    async def test_drops_none_values_from_patch(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["data"] = data
+            return {"id": 1}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        await client.update_task(1, {"title": "x", "description": None, "reminder": -1})
+
+        assert captured["data"] == {"title": "x", "reminder": -1}
+        assert "description" not in captured["data"]
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
             return None
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
-        result = await client.update_task(1, {"status": "c"})
+        monkeypatch.setattr(client, "post", mock_post)
+        result = await client.update_task(1, {"title": "x"})
         assert result == {}
 
 
@@ -1762,27 +1690,41 @@ class TestCreateCompany:
 
 class TestUpdateCompany:
     @pytest.mark.anyio
-    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+    async def test_partial_post_to_company_endpoint(self, monkeypatch):
         captured: dict = {}
 
-        async def mock_fmp(path, patch):
+        async def mock_post(path, data=None, params=None):
             captured["path"] = path
-            captured["patch"] = patch
-            return {"slug": "acme", "city": patch.get("city")}
+            captured["data"] = data
+            return {"slug": "acme", "city": data.get("city")}
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_company("acme", {"city": "Boston"})
 
         assert captured["path"] == "/companies/acme"
-        assert captured["patch"] == {"city": "Boston"}
+        assert captured["data"] == {"city": "Boston"}
         assert result["city"] == "Boston"
 
     @pytest.mark.anyio
-    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
-        async def mock_fmp(path, patch):
+    async def test_drops_none_values_from_patch(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["data"] = data
+            return {"slug": "acme"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        await client.update_company("acme", {"city": "Boston", "address": None})
+
+        assert captured["data"] == {"city": "Boston"}
+        assert "address" not in captured["data"]
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
             return None
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_company("acme", {"city": "x"})
         assert result == {}
 
@@ -1816,27 +1758,41 @@ class TestCreateContact:
 
 class TestUpdateContact:
     @pytest.mark.anyio
-    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+    async def test_partial_post_to_contact_endpoint(self, monkeypatch):
         captured: dict = {}
 
-        async def mock_fmp(path, patch):
+        async def mock_post(path, data=None, params=None):
             captured["path"] = path
-            captured["patch"] = patch
-            return {"slug": "jdoe", "email": patch.get("email")}
+            captured["data"] = data
+            return {"slug": "jdoe", "email": data.get("email")}
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_contact("jdoe", {"email": "j@x.com"})
 
         assert captured["path"] == "/contacts/jdoe"
-        assert captured["patch"] == {"email": "j@x.com"}
+        assert captured["data"] == {"email": "j@x.com"}
         assert result["email"] == "j@x.com"
 
     @pytest.mark.anyio
-    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
-        async def mock_fmp(path, patch):
+    async def test_drops_none_values_from_patch(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["data"] = data
+            return {"slug": "jdoe"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        await client.update_contact("jdoe", {"email": "j@x.com", "city": None})
+
+        assert captured["data"] == {"email": "j@x.com"}
+        assert "city" not in captured["data"]
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
             return None
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_contact("jdoe", {"email": "x"})
         assert result == {}
 
@@ -1878,27 +1834,41 @@ class TestCreateJob:
 
 class TestUpdateJob:
     @pytest.mark.anyio
-    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+    async def test_partial_post_to_job_endpoint(self, monkeypatch):
         captured: dict = {}
 
-        async def mock_fmp(path, patch):
+        async def mock_post(path, data=None, params=None):
             captured["path"] = path
-            captured["patch"] = patch
-            return {"slug": "job-1", "job_status": patch.get("job_status")}
+            captured["data"] = data
+            return {"slug": "job-1", "job_status": data.get("job_status")}
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_job("job-1", {"job_status": 2})
 
         assert captured["path"] == "/jobs/job-1"
-        assert captured["patch"] == {"job_status": 2}
+        assert captured["data"] == {"job_status": 2}
         assert result["job_status"] == 2
 
     @pytest.mark.anyio
-    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
-        async def mock_fmp(path, patch):
+    async def test_drops_none_values_from_patch(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["data"] = data
+            return {"slug": "job-1"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        await client.update_job("job-1", {"job_status": 2, "name": None})
+
+        assert captured["data"] == {"job_status": 2}
+        assert "name" not in captured["data"]
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
             return None
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_job("job-1", {"job_status": 2})
         assert result == {}
 
@@ -1932,54 +1902,82 @@ class TestCreateCandidate:
 
 class TestUpdateCandidate:
     @pytest.mark.anyio
-    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+    async def test_partial_post_to_candidate_endpoint(self, monkeypatch):
         captured: dict = {}
 
-        async def mock_fmp(path, patch):
+        async def mock_post(path, data=None, params=None):
             captured["path"] = path
-            captured["patch"] = patch
-            return {"slug": "cand-1", "position": patch.get("position")}
+            captured["data"] = data
+            return {"slug": "cand-1", "position": data.get("position")}
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_candidate("cand-1", {"position": "Engineer"})
 
         assert captured["path"] == "/candidates/cand-1"
-        assert captured["patch"] == {"position": "Engineer"}
+        assert captured["data"] == {"position": "Engineer"}
         assert result["position"] == "Engineer"
 
     @pytest.mark.anyio
-    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
-        async def mock_fmp(path, patch):
+    async def test_drops_none_values_from_patch(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["data"] = data
+            return {"slug": "cand-1"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        await client.update_candidate("cand-1", {"position": "Engineer", "city": None})
+
+        assert captured["data"] == {"position": "Engineer"}
+        assert "city" not in captured["data"]
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
             return None
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_candidate("cand-1", {"position": "x"})
         assert result == {}
 
 
 class TestUpdateMeeting:
     @pytest.mark.anyio
-    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+    async def test_partial_post_to_meeting_endpoint(self, monkeypatch):
         captured: dict = {}
 
-        async def mock_fmp(path, patch):
+        async def mock_post(path, data=None, params=None):
             captured["path"] = path
-            captured["patch"] = patch
-            return {"id": 7, "title": patch.get("title")}
+            captured["data"] = data
+            return {"id": 7, "title": data.get("title")}
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_meeting(7, {"title": "Updated"})
 
         assert captured["path"] == "/meetings/7"
-        assert captured["patch"] == {"title": "Updated"}
+        assert captured["data"] == {"title": "Updated"}
         assert result["title"] == "Updated"
 
     @pytest.mark.anyio
-    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
-        async def mock_fmp(path, patch):
+    async def test_drops_none_values_from_patch(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["data"] = data
+            return {"id": 7}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        await client.update_meeting(7, {"title": "Updated", "description": None})
+
+        assert captured["data"] == {"title": "Updated"}
+        assert "description" not in captured["data"]
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
             return None
 
-        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        monkeypatch.setattr(client, "post", mock_post)
         result = await client.update_meeting(1, {"title": "x"})
         assert result == {}
 

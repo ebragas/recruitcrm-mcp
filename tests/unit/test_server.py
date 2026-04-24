@@ -1,5 +1,7 @@
 import pytest
+from fastmcp.exceptions import ToolError
 
+from recruit_crm_mcp.client import RecruitCrmError
 from recruit_crm_mcp.models import (
     Associations,
     CustomFieldValue,
@@ -675,8 +677,8 @@ class TestLogMeetingTool:
         assert "associated_candidates" not in payload
         assert "associated_contacts" not in payload
         assert "associated_deals" not in payload
-        # Defaults flow through
-        assert payload["do_not_send_calendar_invites"] is True
+        # Defaults flow through — bool serialized to "1"/"0" (API rejects JSON false)
+        assert payload["do_not_send_calendar_invites"] == "1"
         assert payload["reminder"] == -1
         # Result
         assert isinstance(result, WriteResult)
@@ -720,7 +722,10 @@ class TestLogMeetingTool:
             assert k not in payload, f"expected {k!r} absent, got {payload[k]!r}"
 
     @pytest.mark.anyio
-    async def test_do_not_send_false_flows_through(self, monkeypatch):
+    async def test_do_not_send_false_serializes_to_string_zero(self, monkeypatch):
+        """Python ``False`` must become string ``"0"`` — the live API rejects
+        JSON ``false`` with 422, accepts ``"0"``.
+        """
         captured: dict = {}
 
         async def mock_create_meeting(payload):
@@ -738,7 +743,7 @@ class TestLogMeetingTool:
             do_not_send_calendar_invites=False,
         )
 
-        assert captured["payload"]["do_not_send_calendar_invites"] is False
+        assert captured["payload"]["do_not_send_calendar_invites"] == "0"
 
 
 class TestCreateNoteTool:
@@ -906,6 +911,23 @@ class TestUpdateTaskTool:
             "status": "o",
             "owner_id": 1234,
         }
+
+    @pytest.mark.anyio
+    async def test_forwards_task_type_id_to_client(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_update_task(task_id, patch):
+            captured["task_id"] = task_id
+            captured["patch"] = patch
+            return {"id": task_id}
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "update_task", mock_update_task)
+
+        await update_task(task_id=99, task_type_id=3)
+
+        assert captured["task_id"] == 99
+        assert captured["patch"] == {"task_type_id": 3}
 
 
 # ---------------------------------------------------------------------------
@@ -1610,3 +1632,112 @@ class TestUploadFileTool:
         )
 
         assert captured["folder"] == "Uploads"
+
+
+class TestWriteToolErrorSurfacing:
+    """Write tools must translate ``RecruitCrmError`` into ``ToolError`` so MCP
+    clients see a structured field-level message instead of the raw Python
+    ``RuntimeError`` repr that FastMCP would otherwise stringify."""
+
+    @pytest.mark.anyio
+    async def test_create_note_surfaces_field_validation(self, monkeypatch):
+        async def mock_create_note(payload):
+            raise RecruitCrmError(
+                422, {"description": ["field required"]}, "POST", "/notes"
+            )
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "create_note", mock_create_note)
+
+        with pytest.raises(ToolError) as excinfo:
+            await create_note(
+                description="",
+                related_to=EntityRef(kind="candidate", id="cand-1"),
+            )
+
+        msg = str(excinfo.value)
+        assert "422" in msg
+        assert "description" in msg
+        assert "field required" in msg
+
+    @pytest.mark.anyio
+    async def test_create_task_surfaces_field_validation(self, monkeypatch):
+        async def mock_create_task(payload):
+            raise RecruitCrmError(
+                422, {"start_date": ["required"]}, "POST", "/tasks"
+            )
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "create_task", mock_create_task)
+
+        with pytest.raises(ToolError) as excinfo:
+            await create_task(title="x", start_date="bogus")
+
+        msg = str(excinfo.value)
+        assert "422" in msg
+        assert "start_date" in msg
+
+    @pytest.mark.anyio
+    async def test_log_meeting_surfaces_multiple_field_errors(self, monkeypatch):
+        async def mock_create_meeting(payload):
+            raise RecruitCrmError(
+                422,
+                {"title": ["required"], "end_date": ["must be after start"]},
+                "POST",
+                "/meetings",
+            )
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "create_meeting", mock_create_meeting)
+
+        with pytest.raises(ToolError) as excinfo:
+            await log_meeting(
+                title="",
+                start_date="2025-05-01T09:00:00Z",
+                end_date="2025-05-01T08:00:00Z",
+                related_to=EntityRef(kind="candidate", id="cand-1"),
+            )
+
+        msg = str(excinfo.value)
+        assert "422" in msg
+        # Both field names must appear in the flattened message so the LLM
+        # can see every problem in a single round-trip.
+        assert "title" in msg
+        assert "end_date" in msg
+
+    @pytest.mark.anyio
+    async def test_update_task_surfaces_field_validation(self, monkeypatch):
+        async def mock_update_task(task_id, patch):
+            raise RecruitCrmError(
+                422, {"status": ["invalid value"]}, "POST", "/tasks/42"
+            )
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "update_task", mock_update_task)
+
+        with pytest.raises(ToolError) as excinfo:
+            await update_task(task_id=42, status="bogus")
+
+        msg = str(excinfo.value)
+        assert "422" in msg
+        assert "status" in msg
+        assert "invalid value" in msg
+
+    @pytest.mark.anyio
+    async def test_update_meeting_surfaces_non_dict_body(self, monkeypatch):
+        # Exercise the fallback branch where the API returns a plain string/None
+        # body rather than a field-errors dict.
+        async def mock_update_meeting(meeting_id, patch):
+            raise RecruitCrmError(
+                500, "Internal Server Error", "POST", "/meetings/99"
+            )
+
+        from recruit_crm_mcp import server
+        monkeypatch.setattr(server.client, "update_meeting", mock_update_meeting)
+
+        with pytest.raises(ToolError) as excinfo:
+            await update_meeting(meeting_id=99, title="x")
+
+        msg = str(excinfo.value)
+        assert "500" in msg
+        assert "Internal Server Error" in msg

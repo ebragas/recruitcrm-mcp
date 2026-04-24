@@ -1,12 +1,15 @@
 """Recruit CRM MCP server."""
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from importlib.metadata import version, PackageNotFoundError
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 
 from recruit_crm_mcp import client
+from recruit_crm_mcp.client import RecruitCrmError
 from recruit_crm_mcp.models import (
     AssignedCandidateSummary,
     Associations,
@@ -23,6 +26,8 @@ from recruit_crm_mcp.models import (
     UserSummary,
     WriteResult,
 )
+
+logger = logging.getLogger(__name__)
 
 try:
     __version__ = version("recruit-crm-mcp")
@@ -47,6 +52,14 @@ def _write_result_from(kind: str, response: dict) -> WriteResult:
     raw_id = response.get("id")
     if raw_id is None:
         raw_id = response.get("slug")
+    if raw_id is None:
+        # Neither id nor slug returned — callers get WriteResult.id="" which is
+        # useless for follow-up calls. Log loudly so the symptom surfaces in ops
+        # rather than silently propagating a broken reference.
+        logger.warning(
+            "%s write returned no id/slug — response keys: %s",
+            kind, sorted(response.keys()) if isinstance(response, dict) else type(response).__name__,
+        )
     # Different entities label the same concept with different field names;
     # walk the fallback chain so WriteResult.title populates consistently.
     person_name = f"{response.get('first_name') or ''} {response.get('last_name') or ''}".strip()
@@ -79,6 +92,28 @@ def _build_payload(
     if custom_fields:
         payload["custom_fields"] = [cf.model_dump() for cf in custom_fields]
     return payload
+
+
+def _reraise_as_tool_error(exc: RecruitCrmError) -> None:
+    """Surface RCRM field-level validation errors through FastMCP cleanly.
+
+    FastMCP would otherwise stringify the RuntimeError repr — users see the
+    body dict as a Python string. Convert to ToolError so the message is a
+    clean explanation the LLM can present or act on.
+    """
+    body = exc.body
+    if isinstance(body, dict):
+        # Flatten "{'field': ['msg1', 'msg2']}" -> "field: msg1, msg2"
+        field_errors = "; ".join(
+            f"{k}: {', '.join(v) if isinstance(v, list) else v}"
+            for k, v in body.items()
+        )
+        raise ToolError(
+            f"{exc.method} {exc.path} failed ({exc.status}): {field_errors}"
+        ) from exc
+    raise ToolError(
+        f"{exc.method} {exc.path} failed ({exc.status}): {body}"
+    ) from exc
 
 
 @mcp.tool()
@@ -531,15 +566,15 @@ async def log_meeting(
     start_date: str,
     end_date: str,
     related_to: EntityRef,
-    attendee_contacts: list[str] = [],  # noqa: B006
-    attendee_candidates: list[str] = [],  # noqa: B006
-    attendee_users: list[int] = [],  # noqa: B006
+    attendee_contacts: list[str] | None = None,
+    attendee_candidates: list[str] | None = None,
+    attendee_users: list[int] | None = None,
     description: str | None = None,
     address: str | None = None,
     meeting_type_id: int | None = None,
     reminder: int = -1,
     owner_id: int | None = None,
-    associated: Associations = Associations(),  # noqa: B008
+    associated: Associations | None = None,
     do_not_send_calendar_invites: bool = True,
 ) -> WriteResult:
     """Log a meeting via POST /v1/meetings.
@@ -567,10 +602,15 @@ async def log_meeting(
         "address": address,
         "meeting_type_id": meeting_type_id,
         "owner_id": owner_id,
-        "do_not_send_calendar_invites": do_not_send_calendar_invites,
+        # API rejects JSON `false` with 422 — serialize to "1"/"0" strings instead.
+        "do_not_send_calendar_invites": "1" if do_not_send_calendar_invites else "0",
     })
-    payload.update(client._associations_to_payload(associated))
-    response = await client.create_meeting(payload)
+    if associated is not None:
+        payload.update(client._associations_to_payload(associated))
+    try:
+        response = await client.create_meeting(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("meeting", response)
 
 
@@ -579,7 +619,7 @@ async def create_note(
     description: str,
     related_to: EntityRef,
     note_type_id: int | None = None,
-    associated: Associations = Associations(),  # noqa: B008
+    associated: Associations | None = None,
 ) -> WriteResult:
     """Create a note via POST /v1/notes.
 
@@ -592,8 +632,12 @@ async def create_note(
         "related_to_type": related_to.kind,
         "note_type_id": note_type_id,
     })
-    payload.update(client._associations_to_payload(associated))
-    response = await client.create_note(payload)
+    if associated is not None:
+        payload.update(client._associations_to_payload(associated))
+    try:
+        response = await client.create_note(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("note", response)
 
 
@@ -606,7 +650,7 @@ async def create_task(
     task_type_id: int | None = None,
     owner_id: int | None = None,
     related_to: EntityRef | None = None,
-    associated: Associations = Associations(),  # noqa: B008
+    associated: Associations | None = None,
 ) -> WriteResult:
     """Create a task via POST /v1/tasks.
 
@@ -627,8 +671,12 @@ async def create_task(
         fields["related_to"] = related_to.id
         fields["related_to_type"] = related_to.kind
     payload = _build_payload(fields)
-    payload.update(client._associations_to_payload(associated))
-    response = await client.create_task(payload)
+    if associated is not None:
+        payload.update(client._associations_to_payload(associated))
+    try:
+        response = await client.create_task(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("task", response)
 
 
@@ -639,21 +687,28 @@ async def update_task(
     start_date: str | None = None,
     description: str | None = None,
     status: str | None = None,
+    task_type_id: int | None = None,
     owner_id: int | None = None,
 ) -> WriteResult:
     """Update an existing task via GET+merge+POST on /v1/tasks/{id}.
 
     Only non-None fields are forwarded; omitted fields are preserved.
     ``status`` accepts ``"o"`` (open) or ``"c"`` (complete).
+    ``task_type_id`` is the integer ID from ``list_task_types``; omit to keep
+    current type.
     """
     patch = _build_payload({
         "title": title,
         "start_date": start_date,
         "description": description,
         "status": status,
+        "task_type_id": task_type_id,
         "owner_id": owner_id,
     })
-    response = await client.update_task(task_id, patch)
+    try:
+        response = await client.update_task(task_id, patch)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("task", response)
 
 
@@ -673,7 +728,7 @@ async def create_company(
     country: str | None = None,
     linkedin: str | None = None,
     owner_id: int | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Create a company via POST /v1/companies.
 
@@ -695,7 +750,10 @@ async def create_company(
         },
         custom_fields,
     )
-    response = await client.create_company(payload)
+    try:
+        response = await client.create_company(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("company", response)
 
 
@@ -711,7 +769,7 @@ async def update_company(
     country: str | None = None,
     linkedin: str | None = None,
     owner_id: int | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Update a company via GET+merge+POST on /v1/companies/{slug}.
 
@@ -732,7 +790,10 @@ async def update_company(
         },
         custom_fields,
     )
-    response = await client.update_company(slug, patch)
+    try:
+        response = await client.update_company(slug, patch)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("company", response)
 
 
@@ -769,7 +830,7 @@ async def create_contact(
     country: str | None = None,
     linkedin: str | None = None,
     owner_id: int | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Create a contact via POST /v1/contacts.
 
@@ -794,7 +855,10 @@ async def create_contact(
         },
         custom_fields,
     )
-    response = await client.create_contact(payload)
+    try:
+        response = await client.create_contact(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("contact", response)
 
 
@@ -813,7 +877,7 @@ async def update_contact(
     country: str | None = None,
     linkedin: str | None = None,
     owner_id: int | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Update a contact via GET+merge+POST on /v1/contacts/{slug}.
 
@@ -836,7 +900,10 @@ async def update_contact(
         },
         custom_fields,
     )
-    response = await client.update_contact(slug, patch)
+    try:
+        response = await client.update_contact(slug, patch)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("contact", response)
 
 
@@ -873,7 +940,7 @@ async def create_job(
     owner_id: int | None = None,
     hiring_pipeline_id: int | None = None,
     note_for_candidates: str | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Create a job requisition via POST /v1/jobs.
 
@@ -909,7 +976,10 @@ async def create_job(
         },
         custom_fields,
     )
-    response = await client.create_job(payload)
+    try:
+        response = await client.create_job(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("job", response)
 
 
@@ -923,7 +993,7 @@ async def update_job(
     max_annual_salary: int | None = None,
     owner_id: int | None = None,
     note_for_candidates: str | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Update a job requisition via GET+merge+POST on /v1/jobs/{slug}.
 
@@ -942,7 +1012,10 @@ async def update_job(
         },
         custom_fields,
     )
-    response = await client.update_job(slug, patch)
+    try:
+        response = await client.update_job(slug, patch)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("job", response)
 
 
@@ -978,7 +1051,7 @@ async def create_candidate(
     available_from: str | None = None,
     linkedin: str | None = None,
     owner_id: int | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Create a candidate via POST /v1/candidates.
 
@@ -1007,7 +1080,10 @@ async def create_candidate(
         },
         custom_fields,
     )
-    response = await client.create_candidate(payload)
+    try:
+        response = await client.create_candidate(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("candidate", response)
 
 
@@ -1030,7 +1106,7 @@ async def update_candidate(
     available_from: str | None = None,
     linkedin: str | None = None,
     owner_id: int | None = None,
-    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+    custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
     """Update a candidate via GET+merge+POST on /v1/candidates/{slug}.
 
@@ -1058,7 +1134,10 @@ async def update_candidate(
         },
         custom_fields,
     )
-    response = await client.update_candidate(slug, patch)
+    try:
+        response = await client.update_candidate(slug, patch)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("candidate", response)
 
 
@@ -1088,10 +1167,10 @@ async def update_meeting(
     reminder: int | None = None,
     owner_id: int | None = None,
     related_to: EntityRef | None = None,
-    attendee_contacts: list[str] = [],  # noqa: B006
-    attendee_candidates: list[str] = [],  # noqa: B006
-    attendee_users: list[int] = [],  # noqa: B006
-    associated: Associations = Associations(),  # noqa: B008
+    attendee_contacts: list[str] | None = None,
+    attendee_candidates: list[str] | None = None,
+    attendee_users: list[int] | None = None,
+    associated: Associations | None = None,
     do_not_send_calendar_invites: bool | None = None,
 ) -> WriteResult:
     """Update a meeting via GET+merge+POST on /v1/meetings/{id}.
@@ -1109,7 +1188,12 @@ async def update_meeting(
         "meeting_type_id": meeting_type_id,
         "reminder": reminder,
         "owner_id": owner_id,
-        "do_not_send_calendar_invites": do_not_send_calendar_invites,
+        # API rejects JSON `false` with 422 — serialize to "1"/"0" (None keeps the existing value).
+        "do_not_send_calendar_invites": (
+            None
+            if do_not_send_calendar_invites is None
+            else ("1" if do_not_send_calendar_invites else "0")
+        ),
         "attendee_contacts": client._join(attendee_contacts),
         "attendee_candidates": client._join(attendee_candidates),
         "attendee_users": client._join(attendee_users),
@@ -1118,8 +1202,12 @@ async def update_meeting(
         fields["related_to"] = related_to.id
         fields["related_to_type"] = related_to.kind
     patch = _build_payload(fields)
-    patch.update(client._associations_to_payload(associated))
-    response = await client.update_meeting(meeting_id, patch)
+    if associated is not None:
+        patch.update(client._associations_to_payload(associated))
+    try:
+        response = await client.update_meeting(meeting_id, patch)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return _write_result_from("meeting", response)
 
 
@@ -1129,7 +1217,10 @@ async def delete_note(note_id: int) -> WriteResult:
 
     Returns a ``WriteResult`` with the deleted id for trace.
     """
-    await client.delete_note(note_id)
+    try:
+        await client.delete_note(note_id)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return WriteResult(kind="note", id=str(note_id))
 
 
@@ -1144,7 +1235,10 @@ async def assign_candidate(candidate_slug: str, job_slug: str) -> WriteResult:
 
     The target job is passed as a query param. No body is needed.
     """
-    response = await client.assign_candidate(candidate_slug, job_slug)
+    try:
+        response = await client.assign_candidate(candidate_slug, job_slug)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return WriteResult(
         kind="assignment",
         id=str(response.get("candidate_slug") or candidate_slug),
@@ -1156,7 +1250,10 @@ async def assign_candidate(candidate_slug: str, job_slug: str) -> WriteResult:
 @mcp.tool()
 async def unassign_candidate(candidate_slug: str, job_slug: str) -> WriteResult:
     """Unassign a candidate from a job via POST /v1/candidates/{slug}/unassign."""
-    await client.unassign_candidate(candidate_slug, job_slug)
+    try:
+        await client.unassign_candidate(candidate_slug, job_slug)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return WriteResult(
         kind="assignment",
         id=str(candidate_slug),
@@ -1185,7 +1282,10 @@ async def update_hiring_stage(
         "stage_date": stage_date,
         "create_placement": create_placement,
     })
-    response = await client.update_hiring_stage(candidate_slug, job_slug, body)
+    try:
+        response = await client.update_hiring_stage(candidate_slug, job_slug, body)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return WriteResult(
         kind="assignment",
         id=str(response.get("candidate_slug") or candidate_slug),
@@ -1211,12 +1311,15 @@ async def upload_file(
     sensible default is ``Uploads``). ``related_to`` anchors the file to a
     specific CRM entity.
     """
-    response = await client.upload_file(
-        file_url=file_url,
-        related_to=related_to.id,
-        related_to_type=related_to.kind,
-        folder=folder,
-    )
+    try:
+        response = await client.upload_file(
+            file_url=file_url,
+            related_to=related_to.id,
+            related_to_type=related_to.kind,
+            folder=folder,
+        )
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
     return WriteResult(
         kind="file",
         id=response.get("file_link") or response.get("file_name") or "",
