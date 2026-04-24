@@ -112,6 +112,12 @@ async def _request(
     JSON-encoded ``data`` and multipart are mutually exclusive because httpx
     auto-sets ``Content-Type`` based on the body shape.
     """
+    if files is not None and data is not None:
+        raise ValueError(
+            "Cannot pass both `data` (JSON body) and `files` (multipart) to _request — "
+            "httpx auto-sets Content-Type based on the body shape, so they are mutually exclusive."
+        )
+
     http = _get_client()
     url = f"{API_BASE}{path}"
     kwargs: dict[str, Any] = {"headers": _headers(), "params": params, "timeout": 30.0}

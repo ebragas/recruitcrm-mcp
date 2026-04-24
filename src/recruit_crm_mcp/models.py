@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 RelatedToType = Literal["candidate", "company", "contact", "job", "deal"]
@@ -293,11 +293,11 @@ class Associations(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    candidates: list[str] = []
-    companies: list[str] = []
-    contacts: list[str] = []
-    jobs: list[str] = []
-    deals: list[str] = []
+    candidates: list[str] = Field(default_factory=list)
+    companies: list[str] = Field(default_factory=list)
+    contacts: list[str] = Field(default_factory=list)
+    jobs: list[str] = Field(default_factory=list)
+    deals: list[str] = Field(default_factory=list)
 
 
 class LookupItem(BaseModel):

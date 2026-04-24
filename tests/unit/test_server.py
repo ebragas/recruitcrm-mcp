@@ -121,6 +121,32 @@ class TestWriteResultTitleFallback:
         assert result.title is None
 
 
+class TestBuildPayloadCustomFields:
+    """`_build_payload` distinguishes ``None`` (omit) from ``[]`` (clear all)
+    for ``custom_fields`` so callers can intentionally wipe values."""
+
+    def test_none_omits_key(self):
+        from recruit_crm_mcp.server import _build_payload
+
+        payload = _build_payload({"title": "x"}, custom_fields=None)
+        assert "custom_fields" not in payload
+
+    def test_empty_list_serializes_as_empty_list(self):
+        from recruit_crm_mcp.server import _build_payload
+
+        payload = _build_payload({"title": "x"}, custom_fields=[])
+        assert payload["custom_fields"] == []
+
+    def test_populated_list_dumps_to_dicts(self):
+        from recruit_crm_mcp.server import _build_payload
+
+        payload = _build_payload(
+            {"title": "x"},
+            custom_fields=[CustomFieldValue(field_id=7, value="v")],
+        )
+        assert payload["custom_fields"] == [{"field_id": 7, "value": "v"}]
+
+
 class TestGetContactTool:
     @pytest.mark.anyio
     async def test_returns_full_record(self, monkeypatch):

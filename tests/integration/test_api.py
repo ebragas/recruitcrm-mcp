@@ -1368,8 +1368,12 @@ class TestWrites:
 
 
 def _ts() -> str:
-    """Return a compact UTC timestamp for unique test-entity suffixes."""
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    """Return a compact UTC timestamp (with microseconds) for unique test-entity suffixes.
+
+    Microsecond precision avoids collisions when tests retry within the same
+    second (second-level resolution caused flakes under concurrent / retried runs).
+    """
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
 
 
 class TestWriteSurface:

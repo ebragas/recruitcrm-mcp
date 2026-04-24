@@ -1073,6 +1073,15 @@ class TestRequestBase:
         assert call_kwargs.kwargs.get("json") == {"first_name": "Jane"}
 
     @pytest.mark.anyio
+    async def test_rejects_data_and_files_together(self, monkeypatch):
+        """Passing both JSON data and multipart files is a misuse — httpx
+        auto-sets Content-Type from the body shape, so the two are mutually
+        exclusive. Fail loudly instead of silently dropping ``data``."""
+        # No client needed — the guard fires before any HTTP call.
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            await client._request("POST", "/x", data={"a": 1}, files={"f": ("n", b"")})
+
+    @pytest.mark.anyio
     async def test_delete_request_uses_delete_method(self, monkeypatch):
         """DELETE request uses correct HTTP method."""
         success = _make_response(200, method="DELETE", empty_body=True)

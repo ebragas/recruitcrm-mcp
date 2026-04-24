@@ -84,12 +84,13 @@ def _build_payload(
 ) -> dict:
     """Assemble a create/update payload.
 
-    Drops ``None`` values from ``fields`` (MCP tool kwargs that weren't passed)
-    and appends ``custom_fields`` only when non-empty — the API accepts empty
-    lists, but omitting the key keeps the request body compact.
+    Drops ``None`` values from ``fields`` (MCP tool kwargs that weren't passed).
+    ``custom_fields`` is forwarded whenever explicitly provided: ``None`` omits
+    the key, while an empty list serializes as ``"custom_fields": []`` so
+    callers can intentionally clear all existing custom-field values.
     """
     payload = {k: v for k, v in fields.items() if v is not None}
-    if custom_fields:
+    if custom_fields is not None:
         payload["custom_fields"] = [cf.model_dump() for cf in custom_fields]
     return payload
 
