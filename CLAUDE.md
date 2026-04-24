@@ -96,6 +96,13 @@ uv run <cmd>     # run commands in the venv
 - `/meetings/search` supports: `title`, `created_from/to`, `updated_from/to`, `starting_from/to`, `owner_id` — does NOT accept `related_to` or `related_to_type` (422 rejected)
 - `/meetings` list endpoint accepts `limit` param
 - `/meetings/search` returns `[]` with no filter params
+- **Custom fields are inline on update, not a sub-endpoint.** `POST /companies/{slug}`, `POST /contacts/{slug}`, `POST /jobs/{slug}`, `POST /candidates/{slug}` all accept `custom_fields: [{field_id, value}]` inline in the body. There is NO `/associated-fields` sub-endpoint for company/contact/candidate — that path exists only for candidate-on-job application-question answers, which is out of scope.
+- **Job create required fields (seven):** `name`, `number_of_openings`, `company_slug`, `contact_slug`, `job_description_text`, `currency_id`, `enable_job_application_form`. Omit any of these and the API 422s.
+- **Assign / unassign use `job_slug` as a QUERY PARAM, not a body field.** `POST /candidates/{slug}/assign?job_slug=...` and `POST /candidates/{slug}/unassign?job_slug=...`. No body.
+- **Hiring stage update path uses both slugs and the plural segment:** `POST /candidates/{candidate_slug}/hiring-stages/{job_slug}` with body `{status_id, remark?, stage_date?, create_placement?}`.
+- **File upload uses one endpoint for every entity type.** `POST /v1/files` with multipart form fields `related_to`, `related_to_type`, `folder`, and `files[]`. `files[]` accepts a public URL string OR a file — we support URLs in the MCP. There is no DELETE /files endpoint.
+- **Contact multi-company uses comma-separated `company_slug`.** On `POST /contacts` / `POST /contacts/{slug}`, pass `"slug1,slug2"` as the `company_slug` field. The read response returns `company_slug` (primary) and `additional_company_slugs` (others) separately, but writes expect one combined comma-separated string.
+- **Hiring pipeline stages key mismatch:** `GET /hiring-pipelines/{id}` returns items shaped `{status_id, label}` despite API docs claiming `stage_id`. Code must read `status_id`. `/sales-pipeline` correctly returns `stage_id` as documented.
 
 ### Concurrency
 
@@ -152,3 +159,17 @@ uv run <cmd>     # run commands in the venv
 - Comment on issues when starting and completing work
 - Transition issues through: Todo → In Progress → In Review → Done
 - Valid states: Backlog, Todo, In Progress, In Review, Done, Canceled, Duplicate
+
+### Pre-release workflow
+
+Pre-release builds (`X.Y.ZrcN`, `X.Y.ZaN`, `X.Y.ZbN`, `X.Y.Z.devN`) are published manually for internal testing. They do NOT affect the stable release line driven by semantic-release on `main`.
+
+To cut a pre-release:
+
+1. Push the branch you want to ship (any branch works).
+2. GitHub Actions → **Publish pre-release** → Run workflow → pick the branch → enter the version (e.g. `0.16.0rc1`). The workflow validates the version is a PEP 440 pre-release, runs lint + unit tests, then publishes to PyPI via the existing `pypi` trusted-publisher environment. The version pin happens only on the runner — `pyproject.toml` on the branch is unchanged.
+3. Consumers install with an explicit pin (see README "Installing a pre-release (test) build").
+
+The unpinned `uvx recruit-crm-mcp` in the standard installer keeps resolving to the latest stable — pre-releases are invisible unless pinned, because uv's default `--prerelease=if-necessary` strategy skips them when a stable satisfies the spec.
+
+The workflow trigger is `workflow_dispatch` only. No push, tag, or PR merge can cut a pre-release.

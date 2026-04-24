@@ -9,14 +9,19 @@ from fastmcp import FastMCP
 from recruit_crm_mcp import client
 from recruit_crm_mcp.models import (
     AssignedCandidateSummary,
+    Associations,
     CandidateSummary,
     CompanySummary,
     ContactSummary,
+    CustomFieldValue,
+    EntityRef,
     JobSummary,
+    LookupItem,
     MeetingSummary,
     NoteSummary,
     TaskSummary,
     UserSummary,
+    WriteResult,
 )
 
 try:
@@ -33,6 +38,47 @@ async def _lifespan(server: FastMCP):
 
 
 mcp = FastMCP("Recruit CRM", lifespan=_lifespan)
+
+
+def _write_result_from(kind: str, response: dict) -> WriteResult:
+    """Build a ``WriteResult`` from a Recruit CRM create/update response."""
+    # Explicit None check — some endpoints may return integer id 0 in edge cases,
+    # which `or`-chaining would incorrectly treat as missing.
+    raw_id = response.get("id")
+    if raw_id is None:
+        raw_id = response.get("slug")
+    # Different entities label the same concept with different field names;
+    # walk the fallback chain so WriteResult.title populates consistently.
+    person_name = f"{response.get('first_name') or ''} {response.get('last_name') or ''}".strip()
+    title = (
+        response.get("title")
+        or response.get("name")
+        or response.get("company_name")
+        or person_name
+        or None
+    )
+    return WriteResult(
+        kind=kind,
+        id="" if raw_id is None else str(raw_id),
+        title=title,
+        url=response.get("resource_url"),
+    )
+
+
+def _build_payload(
+    fields: dict,
+    custom_fields: list[CustomFieldValue] | None = None,
+) -> dict:
+    """Assemble a create/update payload.
+
+    Drops ``None`` values from ``fields`` (MCP tool kwargs that weren't passed)
+    and appends ``custom_fields`` only when non-empty — the API accepts empty
+    lists, but omitting the key keeps the request body compact.
+    """
+    payload = {k: v for k, v in fields.items() if v is not None}
+    if custom_fields:
+        payload["custom_fields"] = [cf.model_dump() for cf in custom_fields]
+    return payload
 
 
 @mcp.tool()
@@ -365,6 +411,818 @@ async def list_users() -> list[UserSummary]:
     """
     results = await client.list_users()
     return [UserSummary.from_api_response(u) for u in results]
+
+
+@mcp.tool()
+async def list_note_types() -> list[LookupItem]:
+    """List all note types available in the account.
+
+    Returns {id, label} pairs suitable for passing as note_type_id on note writes.
+    """
+    results = await client.list_note_types()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_meeting_types() -> list[LookupItem]:
+    """List all meeting types available in the account.
+
+    Returns {id, label} pairs suitable for passing as meeting_type_id on meeting writes.
+    """
+    results = await client.list_meeting_types()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_task_types() -> list[LookupItem]:
+    """List all task types available in the account.
+
+    Returns {id, label} pairs suitable for passing as task_type_id on task writes.
+    """
+    results = await client.list_task_types()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_hiring_pipelines() -> list[LookupItem]:
+    """List all hiring pipelines configured in the account.
+
+    Pipeline ID 0 is the master hiring pipeline. Use list_hiring_pipeline_stages
+    with the returned id to inspect stages for a specific pipeline.
+    """
+    results = await client.list_hiring_pipelines()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_hiring_pipeline_stages(pipeline_id: int) -> list[LookupItem]:
+    """List hiring pipeline stages for a given pipeline.
+
+    Use pipeline_id=0 for the master hiring pipeline. Returns {id, label} stage
+    entries suitable for filtering assigned candidates by hiring stage.
+    """
+    results = await client.list_hiring_pipeline_stages(pipeline_id)
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_contact_stages() -> list[LookupItem]:
+    """List sales pipeline stages (contact stages).
+
+    Returns {id, label} pairs for each stage in the sales pipeline.
+    """
+    results = await client.list_contact_stages()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_industries() -> list[LookupItem]:
+    """List all industries available in the account.
+
+    Returns {id, label} pairs suitable for populating a company's industry_id.
+    """
+    results = await client.list_industries()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_company_custom_fields() -> list[LookupItem]:
+    """List all company custom fields defined in the account.
+
+    Returns {id, label} pairs where id is the field_id and label is the field name.
+    """
+    results = await client.list_company_custom_fields()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_contact_custom_fields() -> list[LookupItem]:
+    """List all contact custom fields defined in the account.
+
+    Returns {id, label} pairs where id is the field_id and label is the field name.
+    """
+    results = await client.list_contact_custom_fields()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_job_custom_fields() -> list[LookupItem]:
+    """List all job custom fields defined in the account.
+
+    Returns {id, label} pairs where id is the field_id and label is the field name.
+    """
+    results = await client.list_job_custom_fields()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def list_candidate_custom_fields() -> list[LookupItem]:
+    """List all candidate custom fields defined in the account.
+
+    Returns {id, label} pairs where id is the field_id and label is the field name.
+    """
+    results = await client.list_candidate_custom_fields()
+    return [LookupItem.from_api_response(item) for item in results]
+
+
+@mcp.tool()
+async def log_meeting(
+    title: str,
+    start_date: str,
+    end_date: str,
+    related_to: EntityRef,
+    attendee_contacts: list[str] = [],  # noqa: B006
+    attendee_candidates: list[str] = [],  # noqa: B006
+    attendee_users: list[int] = [],  # noqa: B006
+    description: str | None = None,
+    address: str | None = None,
+    meeting_type_id: int | None = None,
+    reminder: int = -1,
+    owner_id: int | None = None,
+    associated: Associations = Associations(),  # noqa: B008
+    do_not_send_calendar_invites: bool = True,
+) -> WriteResult:
+    """Log a meeting via POST /v1/meetings.
+
+    Dates use ISO 8601 (e.g. ``2025-04-29T18:30:00Z``).
+    ``related_to`` is the primary anchor entity. Use ``associated`` to cross-link
+    the meeting to additional candidates/companies/contacts/jobs/deals.
+    ``attendee_users`` expects integer user IDs; ``attendee_contacts`` and
+    ``attendee_candidates`` expect slug strings.
+    ``reminder`` accepts: -1 (no reminder), 0, 15, 30, 60, 120, 1440 (minutes before).
+    ``do_not_send_calendar_invites`` defaults to True — safe for historical logging;
+    set False to actually send invites to attendees.
+    """
+    payload = _build_payload({
+        "title": title,
+        "start_date": start_date,
+        "end_date": end_date,
+        "reminder": reminder,
+        "related_to": related_to.id,
+        "related_to_type": related_to.kind,
+        "attendee_contacts": client._join(attendee_contacts),
+        "attendee_candidates": client._join(attendee_candidates),
+        "attendee_users": client._join(attendee_users),
+        "description": description,
+        "address": address,
+        "meeting_type_id": meeting_type_id,
+        "owner_id": owner_id,
+        "do_not_send_calendar_invites": do_not_send_calendar_invites,
+    })
+    payload.update(client._associations_to_payload(associated))
+    response = await client.create_meeting(payload)
+    return _write_result_from("meeting", response)
+
+
+@mcp.tool()
+async def create_note(
+    description: str,
+    related_to: EntityRef,
+    note_type_id: int | None = None,
+    associated: Associations = Associations(),  # noqa: B008
+) -> WriteResult:
+    """Create a note via POST /v1/notes.
+
+    ``related_to`` is the primary anchor entity. Use ``associated`` to cross-link
+    the note to additional candidates/companies/contacts/jobs/deals.
+    """
+    payload = _build_payload({
+        "description": description,
+        "related_to": related_to.id,
+        "related_to_type": related_to.kind,
+        "note_type_id": note_type_id,
+    })
+    payload.update(client._associations_to_payload(associated))
+    response = await client.create_note(payload)
+    return _write_result_from("note", response)
+
+
+@mcp.tool()
+async def create_task(
+    title: str,
+    start_date: str,
+    description: str | None = None,
+    reminder: int = 1440,
+    task_type_id: int | None = None,
+    owner_id: int | None = None,
+    related_to: EntityRef | None = None,
+    associated: Associations = Associations(),  # noqa: B008
+) -> WriteResult:
+    """Create a task via POST /v1/tasks.
+
+    ``start_date`` uses ISO 8601 (e.g. ``2025-04-29T18:30:00Z``).
+    ``related_to`` is optional but recommended for easy discovery.
+    ``reminder`` accepts: -1 (no reminder), 0, 15, 30, 60, 1440 (minutes before);
+    defaults to 1440 (1 day before).
+    """
+    fields: dict = {
+        "title": title,
+        "start_date": start_date,
+        "reminder": reminder,
+        "description": description,
+        "task_type_id": task_type_id,
+        "owner_id": owner_id,
+    }
+    if related_to is not None:
+        fields["related_to"] = related_to.id
+        fields["related_to_type"] = related_to.kind
+    payload = _build_payload(fields)
+    payload.update(client._associations_to_payload(associated))
+    response = await client.create_task(payload)
+    return _write_result_from("task", response)
+
+
+@mcp.tool()
+async def update_task(
+    task_id: int,
+    title: str | None = None,
+    start_date: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    owner_id: int | None = None,
+) -> WriteResult:
+    """Update an existing task via GET+merge+POST on /v1/tasks/{id}.
+
+    Only non-None fields are forwarded; omitted fields are preserved.
+    ``status`` accepts ``"o"`` (open) or ``"c"`` (complete).
+    """
+    patch = _build_payload({
+        "title": title,
+        "start_date": start_date,
+        "description": description,
+        "status": status,
+        "owner_id": owner_id,
+    })
+    response = await client.update_task(task_id, patch)
+    return _write_result_from("task", response)
+
+
+# ---------------------------------------------------------------------------
+# Company write tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def create_company(
+    company_name: str,
+    about_company: str | None = None,
+    website: str | None = None,
+    industry_id: int | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    linkedin: str | None = None,
+    owner_id: int | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Create a company via POST /v1/companies.
+
+    ``company_name`` is the only required field. Use ``list_industries`` to
+    resolve ``industry_id`` and ``list_company_custom_fields`` to discover
+    valid ``custom_fields`` field_ids.
+    """
+    payload = _build_payload(
+        {
+            "company_name": company_name,
+            "about_company": about_company,
+            "website": website,
+            "industry_id": industry_id,
+            "city": city,
+            "state": state,
+            "country": country,
+            "linkedin": linkedin,
+            "owner_id": owner_id,
+        },
+        custom_fields,
+    )
+    response = await client.create_company(payload)
+    return _write_result_from("company", response)
+
+
+@mcp.tool()
+async def update_company(
+    slug: str,
+    company_name: str | None = None,
+    about_company: str | None = None,
+    website: str | None = None,
+    industry_id: int | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    linkedin: str | None = None,
+    owner_id: int | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Update a company via GET+merge+POST on /v1/companies/{slug}.
+
+    Only non-None fields are forwarded; omitted fields are preserved from the
+    current record (the API's required ``company_name`` is kept automatically).
+    """
+    patch = _build_payload(
+        {
+            "company_name": company_name,
+            "about_company": about_company,
+            "website": website,
+            "industry_id": industry_id,
+            "city": city,
+            "state": state,
+            "country": country,
+            "linkedin": linkedin,
+            "owner_id": owner_id,
+        },
+        custom_fields,
+    )
+    response = await client.update_company(slug, patch)
+    return _write_result_from("company", response)
+
+
+@mcp.tool()
+async def set_company_custom_fields(
+    slug: str,
+    fields: list[CustomFieldValue],
+) -> WriteResult:
+    """Set custom-field values on a company without touching any standard fields.
+
+    Thin wrapper over ``update_company`` — the edit endpoint accepts
+    ``custom_fields`` inline (there is no separate associated-fields endpoint
+    for companies).
+    """
+    return await update_company(slug=slug, custom_fields=fields)
+
+
+# ---------------------------------------------------------------------------
+# Contact write tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def create_contact(
+    first_name: str,
+    last_name: str,
+    email: str | None = None,
+    contact_number: str | None = None,
+    designation: str | None = None,
+    stage_id: int | None = None,
+    company_slug: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    linkedin: str | None = None,
+    owner_id: int | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Create a contact via POST /v1/contacts.
+
+    ``first_name`` and ``last_name`` are required. ``company_slug`` accepts a
+    comma-separated string for multi-company associations. Use
+    ``list_contact_stages`` to resolve ``stage_id``.
+    """
+    payload = _build_payload(
+        {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "contact_number": contact_number,
+            "designation": designation,
+            "stage_id": stage_id,
+            "company_slug": company_slug,
+            "city": city,
+            "state": state,
+            "country": country,
+            "linkedin": linkedin,
+            "owner_id": owner_id,
+        },
+        custom_fields,
+    )
+    response = await client.create_contact(payload)
+    return _write_result_from("contact", response)
+
+
+@mcp.tool()
+async def update_contact(
+    slug: str,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    contact_number: str | None = None,
+    designation: str | None = None,
+    stage_id: int | None = None,
+    company_slug: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    linkedin: str | None = None,
+    owner_id: int | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Update a contact via GET+merge+POST on /v1/contacts/{slug}.
+
+    Only non-None fields are forwarded; omitted fields are preserved.
+    """
+    patch = _build_payload(
+        {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "contact_number": contact_number,
+            "designation": designation,
+            "stage_id": stage_id,
+            "company_slug": company_slug,
+            "city": city,
+            "state": state,
+            "country": country,
+            "linkedin": linkedin,
+            "owner_id": owner_id,
+        },
+        custom_fields,
+    )
+    response = await client.update_contact(slug, patch)
+    return _write_result_from("contact", response)
+
+
+@mcp.tool()
+async def set_contact_custom_fields(
+    slug: str,
+    fields: list[CustomFieldValue],
+) -> WriteResult:
+    """Set custom-field values on a contact without touching any standard fields."""
+    return await update_contact(slug=slug, custom_fields=fields)
+
+
+# ---------------------------------------------------------------------------
+# Job write tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def create_job(
+    name: str,
+    company_slug: str,
+    contact_slug: str,
+    number_of_openings: int,
+    currency_id: int,
+    enable_job_application_form: int,
+    job_description_text: str,
+    job_status: int | None = None,
+    job_location_type: int | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    min_annual_salary: int | None = None,
+    max_annual_salary: int | None = None,
+    owner_id: int | None = None,
+    hiring_pipeline_id: int | None = None,
+    note_for_candidates: str | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Create a job requisition via POST /v1/jobs.
+
+    Seven fields are required: ``name``, ``company_slug``, ``contact_slug``,
+    ``number_of_openings``, ``currency_id``, ``enable_job_application_form``,
+    ``job_description_text``.
+
+    ``job_status`` codes: 0=Closed, 1=Open, 2=On Hold, 3=Cancelled.
+    ``job_location_type`` codes: 0=On-site, 1=Remote, 2=Hybrid.
+
+    Use ``list_hiring_pipelines`` for ``hiring_pipeline_id`` and
+    ``list_job_custom_fields`` for ``custom_fields``.
+    """
+    payload = _build_payload(
+        {
+            "name": name,
+            "company_slug": company_slug,
+            "contact_slug": contact_slug,
+            "number_of_openings": number_of_openings,
+            "currency_id": currency_id,
+            "enable_job_application_form": enable_job_application_form,
+            "job_description_text": job_description_text,
+            "job_status": job_status,
+            "job_location_type": job_location_type,
+            "city": city,
+            "state": state,
+            "country": country,
+            "min_annual_salary": min_annual_salary,
+            "max_annual_salary": max_annual_salary,
+            "owner_id": owner_id,
+            "hiring_pipeline_id": hiring_pipeline_id,
+            "note_for_candidates": note_for_candidates,
+        },
+        custom_fields,
+    )
+    response = await client.create_job(payload)
+    return _write_result_from("job", response)
+
+
+@mcp.tool()
+async def update_job(
+    slug: str,
+    name: str | None = None,
+    job_status: int | None = None,
+    job_location_type: int | None = None,
+    min_annual_salary: int | None = None,
+    max_annual_salary: int | None = None,
+    owner_id: int | None = None,
+    note_for_candidates: str | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Update a job requisition via GET+merge+POST on /v1/jobs/{slug}.
+
+    Only the fields most commonly edited are exposed; use the full ``create_job``
+    surface area if you need to change other fields.
+    """
+    patch = _build_payload(
+        {
+            "name": name,
+            "job_status": job_status,
+            "job_location_type": job_location_type,
+            "min_annual_salary": min_annual_salary,
+            "max_annual_salary": max_annual_salary,
+            "owner_id": owner_id,
+            "note_for_candidates": note_for_candidates,
+        },
+        custom_fields,
+    )
+    response = await client.update_job(slug, patch)
+    return _write_result_from("job", response)
+
+
+@mcp.tool()
+async def set_job_custom_fields(
+    slug: str,
+    fields: list[CustomFieldValue],
+) -> WriteResult:
+    """Set custom-field values on a job without touching any standard fields."""
+    return await update_job(slug=slug, custom_fields=fields)
+
+
+# ---------------------------------------------------------------------------
+# Candidate write tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def create_candidate(
+    first_name: str,
+    last_name: str | None = None,
+    email: str | None = None,
+    contact_number: str | None = None,
+    current_organization: str | None = None,
+    current_organization_slug: str | None = None,
+    current_status: str | None = None,
+    position: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    salary_expectation: str | None = None,
+    notice_period: int | None = None,
+    available_from: str | None = None,
+    linkedin: str | None = None,
+    owner_id: int | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Create a candidate via POST /v1/candidates.
+
+    ``first_name`` is the only required field. ``current_organization_slug``
+    links the candidate to an existing company record; ``current_organization``
+    is the free-text fallback.
+    """
+    payload = _build_payload(
+        {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "contact_number": contact_number,
+            "current_organization": current_organization,
+            "current_organization_slug": current_organization_slug,
+            "current_status": current_status,
+            "position": position,
+            "city": city,
+            "state": state,
+            "country": country,
+            "salary_expectation": salary_expectation,
+            "notice_period": notice_period,
+            "available_from": available_from,
+            "linkedin": linkedin,
+            "owner_id": owner_id,
+        },
+        custom_fields,
+    )
+    response = await client.create_candidate(payload)
+    return _write_result_from("candidate", response)
+
+
+@mcp.tool()
+async def update_candidate(
+    slug: str,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    contact_number: str | None = None,
+    current_organization: str | None = None,
+    current_organization_slug: str | None = None,
+    current_status: str | None = None,
+    position: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    country: str | None = None,
+    salary_expectation: str | None = None,
+    notice_period: int | None = None,
+    available_from: str | None = None,
+    linkedin: str | None = None,
+    owner_id: int | None = None,
+    custom_fields: list[CustomFieldValue] = [],  # noqa: B006
+) -> WriteResult:
+    """Update a candidate via GET+merge+POST on /v1/candidates/{slug}.
+
+    Only non-None fields are forwarded; omitted fields are preserved from the
+    current record (the API's required ``first_name`` is kept automatically).
+    """
+    patch = _build_payload(
+        {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "contact_number": contact_number,
+            "current_organization": current_organization,
+            "current_organization_slug": current_organization_slug,
+            "current_status": current_status,
+            "position": position,
+            "city": city,
+            "state": state,
+            "country": country,
+            "salary_expectation": salary_expectation,
+            "notice_period": notice_period,
+            "available_from": available_from,
+            "linkedin": linkedin,
+            "owner_id": owner_id,
+        },
+        custom_fields,
+    )
+    response = await client.update_candidate(slug, patch)
+    return _write_result_from("candidate", response)
+
+
+@mcp.tool()
+async def set_candidate_custom_fields(
+    slug: str,
+    fields: list[CustomFieldValue],
+) -> WriteResult:
+    """Set custom-field values on a candidate without touching any standard fields."""
+    return await update_candidate(slug=slug, custom_fields=fields)
+
+
+# ---------------------------------------------------------------------------
+# Meeting update / note delete
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def update_meeting(
+    meeting_id: int,
+    title: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    description: str | None = None,
+    address: str | None = None,
+    meeting_type_id: int | None = None,
+    reminder: int | None = None,
+    owner_id: int | None = None,
+    related_to: EntityRef | None = None,
+    attendee_contacts: list[str] = [],  # noqa: B006
+    attendee_candidates: list[str] = [],  # noqa: B006
+    attendee_users: list[int] = [],  # noqa: B006
+    associated: Associations = Associations(),  # noqa: B008
+    do_not_send_calendar_invites: bool | None = None,
+) -> WriteResult:
+    """Update a meeting via GET+merge+POST on /v1/meetings/{id}.
+
+    Only non-None fields are forwarded; omitted fields are preserved. Attendee
+    and association lists are joined into comma-separated strings to match the
+    create-endpoint shape.
+    """
+    fields: dict = {
+        "title": title,
+        "start_date": start_date,
+        "end_date": end_date,
+        "description": description,
+        "address": address,
+        "meeting_type_id": meeting_type_id,
+        "reminder": reminder,
+        "owner_id": owner_id,
+        "do_not_send_calendar_invites": do_not_send_calendar_invites,
+        "attendee_contacts": client._join(attendee_contacts),
+        "attendee_candidates": client._join(attendee_candidates),
+        "attendee_users": client._join(attendee_users),
+    }
+    if related_to is not None:
+        fields["related_to"] = related_to.id
+        fields["related_to_type"] = related_to.kind
+    patch = _build_payload(fields)
+    patch.update(client._associations_to_payload(associated))
+    response = await client.update_meeting(meeting_id, patch)
+    return _write_result_from("meeting", response)
+
+
+@mcp.tool()
+async def delete_note(note_id: int) -> WriteResult:
+    """Delete a note via DELETE /v1/notes/{id}.
+
+    Returns a ``WriteResult`` with the deleted id for trace.
+    """
+    await client.delete_note(note_id)
+    return WriteResult(kind="note", id=str(note_id))
+
+
+# ---------------------------------------------------------------------------
+# Assignment trio — candidate/job linkage
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def assign_candidate(candidate_slug: str, job_slug: str) -> WriteResult:
+    """Assign a candidate to a job via POST /v1/candidates/{slug}/assign.
+
+    The target job is passed as a query param. No body is needed.
+    """
+    response = await client.assign_candidate(candidate_slug, job_slug)
+    return WriteResult(
+        kind="assignment",
+        id=str(response.get("candidate_slug") or candidate_slug),
+        title=f"{candidate_slug} -> {job_slug}",
+        url=response.get("shared_list_url"),
+    )
+
+
+@mcp.tool()
+async def unassign_candidate(candidate_slug: str, job_slug: str) -> WriteResult:
+    """Unassign a candidate from a job via POST /v1/candidates/{slug}/unassign."""
+    await client.unassign_candidate(candidate_slug, job_slug)
+    return WriteResult(
+        kind="assignment",
+        id=str(candidate_slug),
+        title=f"{candidate_slug} x {job_slug}",
+    )
+
+
+@mcp.tool()
+async def update_hiring_stage(
+    candidate_slug: str,
+    job_slug: str,
+    status_id: int,
+    remark: str | None = None,
+    stage_date: str | None = None,
+    create_placement: bool | None = None,
+) -> WriteResult:
+    """Update a candidate's hiring stage for a specific job.
+
+    POST /v1/candidates/{candidate_slug}/hiring-stages/{job_slug}. Use
+    ``list_hiring_pipeline_stages`` to resolve ``status_id`` for the correct
+    pipeline.
+    """
+    body = _build_payload({
+        "status_id": status_id,
+        "remark": remark,
+        "stage_date": stage_date,
+        "create_placement": create_placement,
+    })
+    response = await client.update_hiring_stage(candidate_slug, job_slug, body)
+    return WriteResult(
+        kind="assignment",
+        id=str(response.get("candidate_slug") or candidate_slug),
+        title=f"{candidate_slug} -> stage {status_id}",
+    )
+
+
+# ---------------------------------------------------------------------------
+# File upload
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def upload_file(
+    file_url: str,
+    related_to: EntityRef,
+    folder: str = "Uploads",
+) -> WriteResult:
+    """Upload a file to Recruit CRM via POST /v1/files (multipart).
+
+    ``file_url`` must be a publicly reachable URL — the Recruit CRM backend
+    fetches the bytes itself. ``folder`` is the destination folder name (a
+    sensible default is ``Uploads``). ``related_to`` anchors the file to a
+    specific CRM entity.
+    """
+    response = await client.upload_file(
+        file_url=file_url,
+        related_to=related_to.id,
+        related_to_type=related_to.kind,
+        folder=folder,
+    )
+    return WriteResult(
+        kind="file",
+        id=response.get("file_link") or response.get("file_name") or "",
+        title=response.get("file_name"),
+        url=response.get("file_link"),
+    )
 
 
 @mcp.resource("recruitcrm://candidate/{candidate_id}/resume")

@@ -10,6 +10,26 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+
+class RecruitCrmError(RuntimeError):
+    """Structured error raised for non-2xx responses from the Recruit CRM API.
+
+    Exposes the HTTP status and the parsed body (when JSON) so callers
+    — including FastMCP tool surfaces — can show field-level validation errors.
+    """
+
+    def __init__(self, status: int, body: Any, method: str, path: str) -> None:
+        self.status = status
+        self.body = body
+        self.method = method
+        self.path = path
+        super().__init__(f"{method} {path} -> {status}: {body!r}")
+
+
+_UPDATE_STRIP_KEYS = frozenset(
+    {"id", "slug", "created_on", "updated_on", "created_by", "updated_by", "resource_url"}
+)
+
 API_BASE = "https://api.recruitcrm.io/v1"
 
 _client: httpx.AsyncClient | None = None
@@ -84,16 +104,25 @@ async def _request(
     path: str,
     data: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
+    form: dict[str, Any] | None = None,
+    files: dict[str, Any] | None = None,
 ) -> Any:
     """Send an HTTP request to the Recruit CRM API.
 
     Handles auth headers, rate-limit retry (429), and response parsing.
     Returns parsed JSON, or ``None`` when the response body is empty.
+
+    When ``files`` is provided the request is sent as ``multipart/form-data`` —
+    JSON-encoded ``data`` and multipart are mutually exclusive because httpx
+    auto-sets ``Content-Type`` based on the body shape.
     """
     http = _get_client()
     url = f"{API_BASE}{path}"
     kwargs: dict[str, Any] = {"headers": _headers(), "params": params, "timeout": 30.0}
-    if data is not None:
+    if files is not None:
+        kwargs["data"] = form or {}
+        kwargs["files"] = files
+    elif data is not None:
         kwargs["json"] = data
 
     resp = await http.request(method, url, **kwargs)
@@ -104,7 +133,15 @@ async def _request(
         await anyio.sleep(wait)
         resp = await http.request(method, url, **kwargs)
 
-    resp.raise_for_status()
+    if not (200 <= resp.status_code < 300):
+        if resp.content:
+            try:
+                body: Any = resp.json()
+            except ValueError:
+                body = resp.text
+        else:
+            body = None
+        raise RecruitCrmError(resp.status_code, body, method, path)
 
     if resp.content:
         return resp.json()
@@ -130,6 +167,18 @@ async def delete(path: str, params: dict[str, Any] | None = None) -> Any:
     return await _request("DELETE", path, params=params)
 
 
+async def post_multipart(
+    path: str,
+    form: dict[str, Any],
+    files: dict[str, Any],
+    params: dict[str, Any] | None = None,
+) -> Any:
+    """Make a multipart/form-data POST. ``files`` is a dict of httpx-shaped tuples
+    (see https://www.python-httpx.org/multipart/). Form fields and files are
+    sent together; ``Content-Type`` is auto-set by httpx."""
+    return await _request("POST", path, params=params, form=form, files=files)
+
+
 def _extract_results(data: Any) -> list[dict]:
     """Normalize API responses into a flat list of records."""
     if isinstance(data, dict) and "data" in data:
@@ -137,6 +186,58 @@ def _extract_results(data: Any) -> list[dict]:
     if isinstance(data, list):
         return data
     return [data] if data else []
+
+
+def _join(values: list[str] | list[int] | None) -> str | None:
+    """Return a comma-separated string or ``None`` when the input is empty/None.
+
+    Accepts strings or ints so callers can pass user ID lists without a manual
+    ``[str(x) for x in ...]`` pre-pass.
+    """
+    if not values:
+        return None
+    return ",".join(str(v) for v in values)
+
+
+def _associations_to_payload(associated: Any) -> dict[str, str]:
+    """Flatten an ``Associations`` model to the API's ``associated_*`` payload keys.
+
+    Omits empty lists entirely so callers can merge the result directly into a
+    create payload without a second ``is not None`` sweep.
+    """
+    pairs = {
+        "associated_candidates": associated.candidates,
+        "associated_companies": associated.companies,
+        "associated_contacts": associated.contacts,
+        "associated_jobs": associated.jobs,
+        "associated_deals": associated.deals,
+    }
+    return {k: joined for k, v in pairs.items() if (joined := _join(v)) is not None}
+
+
+async def _fetch_merge_post(path: str, patch: dict[str, Any]) -> Any:
+    """Fetch-merge-POST pattern for update endpoints.
+
+    GETs the current record, drops keys that shouldn't round-trip
+    (id/slug/created_on/updated_on/created_by/updated_by/resource_url),
+    applies ``patch`` (non-None values only), POSTs the merged body.
+
+    Required because some tenant configs have endpoints that silently
+    blank fields when omitted from a partial POST.
+    """
+    current = await get(path)
+    if not isinstance(current, dict):
+        raise RecruitCrmError(
+            500,
+            f"Expected dict from GET {path}, got {type(current).__name__}",
+            "GET",
+            path,
+        )
+    merged = {k: v for k, v in current.items() if k not in _UPDATE_STRIP_KEYS}
+    for k, v in patch.items():
+        if v is not None:
+            merged[k] = v
+    return await post(path, merged)
 
 
 async def search_candidates(
@@ -530,3 +631,293 @@ async def list_users() -> list[dict]:
     """List all team members/users."""
     data = await get("/users")
     return _extract_results(data)
+
+
+# ---------------------------------------------------------------------------
+# Lookup endpoints
+# ---------------------------------------------------------------------------
+
+
+async def list_note_types() -> list[dict]:
+    """List all note types.
+
+    Response shape is already ``{id, label}``; no normalization needed.
+    """
+    data = await get("/note-types")
+    return _extract_results(data)
+
+
+async def list_meeting_types() -> list[dict]:
+    """List all meeting types.
+
+    Response shape is already ``{id, label}``; no normalization needed.
+    """
+    data = await get("/meeting-types")
+    return _extract_results(data)
+
+
+async def list_task_types() -> list[dict]:
+    """List all task types.
+
+    Response shape is already ``{id, label}``; no normalization needed.
+    """
+    data = await get("/task-types")
+    return _extract_results(data)
+
+
+async def list_hiring_pipelines() -> list[dict]:
+    """List all hiring pipelines.
+
+    Pipeline ID ``0`` is the master hiring pipeline. The API returns
+    ``{id, name}`` — we remap ``name`` to ``label`` for LookupItem consistency.
+    """
+    data = await get("/hiring-pipelines")
+    raw = _extract_results(data)
+    return [{"id": item.get("id"), "label": item.get("name") or ""} for item in raw]
+
+
+async def list_hiring_pipeline_stages(pipeline_id: int) -> list[dict]:
+    """List hiring pipeline stages for a given pipeline ID.
+
+    Use ``pipeline_id=0`` for the master hiring pipeline. The live API
+    returns ``{status_id, label}`` (despite docs naming the field ``stage_id``);
+    we remap ``status_id`` to ``id`` for LookupItem consistency.
+    """
+    data = await get(f"/hiring-pipelines/{pipeline_id}")
+    raw = _extract_results(data)
+    return [{"id": item.get("status_id"), "label": item.get("label") or ""} for item in raw]
+
+
+async def list_contact_stages() -> list[dict]:
+    """List sales pipeline stages (contact stages).
+
+    The API returns ``{stage_id, label}`` — we remap ``stage_id`` to ``id``
+    for LookupItem consistency.
+    """
+    data = await get("/sales-pipeline")
+    raw = _extract_results(data)
+    return [{"id": item.get("stage_id"), "label": item.get("label") or ""} for item in raw]
+
+
+async def list_industries() -> list[dict]:
+    """List all industries.
+
+    The API returns ``{industry_id, label}`` — we remap ``industry_id`` to
+    ``id`` for LookupItem consistency.
+    """
+    data = await get("/industries")
+    raw = _extract_results(data)
+    return [
+        {"id": item.get("industry_id"), "label": item.get("label") or ""}
+        for item in raw
+    ]
+
+
+def _normalize_custom_field(item: dict) -> dict:
+    """Map custom-field records from ``field_id``/``field_name`` to ``id``/``label``.
+
+    Preserves other keys (``field_type``, ``entity_type``, ``default_value``)
+    so callers can still inspect them.
+    """
+    out = dict(item)
+    out["id"] = item.get("field_id")
+    out["label"] = item.get("field_name") or ""
+    return out
+
+
+async def list_company_custom_fields() -> list[dict]:
+    """List all company custom fields."""
+    data = await get("/custom-fields/companies")
+    return [_normalize_custom_field(item) for item in _extract_results(data)]
+
+
+async def list_contact_custom_fields() -> list[dict]:
+    """List all contact custom fields."""
+    data = await get("/custom-fields/contacts")
+    return [_normalize_custom_field(item) for item in _extract_results(data)]
+
+
+async def list_job_custom_fields() -> list[dict]:
+    """List all job custom fields."""
+    data = await get("/custom-fields/jobs")
+    return [_normalize_custom_field(item) for item in _extract_results(data)]
+
+
+async def list_candidate_custom_fields() -> list[dict]:
+    """List all candidate custom fields."""
+    data = await get("/custom-fields/candidates")
+    return [_normalize_custom_field(item) for item in _extract_results(data)]
+
+
+# ---------------------------------------------------------------------------
+# Write endpoints
+# ---------------------------------------------------------------------------
+
+
+async def create_meeting(payload: dict[str, Any]) -> dict:
+    """POST /v1/meetings — see docs/api-reference/creates-a-new-meeting.md."""
+    return await post("/meetings", payload) or {}
+
+
+async def create_note(payload: dict[str, Any]) -> dict:
+    """POST /v1/notes — see docs/api-reference/creates-a-new-note.md."""
+    return await post("/notes", payload) or {}
+
+
+async def create_task(payload: dict[str, Any]) -> dict:
+    """POST /v1/tasks — see docs/api-reference/creates-a-new-task.md."""
+    return await post("/tasks", payload) or {}
+
+
+async def update_task(task_id: int, patch: dict[str, Any]) -> dict:
+    """GET /tasks/{id} → merge patch → POST /tasks/{id}. See edit-task.md.
+
+    Uses ``_fetch_merge_post`` to avoid silently blanking omitted fields.
+    """
+    result = await _fetch_merge_post(f"/tasks/{task_id}", patch)
+    return result or {}
+
+
+# ---------------------------------------------------------------------------
+# CRUD write endpoints — companies / contacts / jobs / candidates
+# ---------------------------------------------------------------------------
+
+
+async def create_company(payload: dict[str, Any]) -> dict:
+    """POST /v1/companies — create a new company record."""
+    return await post("/companies", payload) or {}
+
+
+async def update_company(company_slug: str, patch: dict[str, Any]) -> dict:
+    """GET /companies/{slug} → merge → POST /companies/{slug}.
+
+    Uses ``_fetch_merge_post`` so the required ``company_name`` is preserved
+    when not explicitly set in the patch.
+    """
+    result = await _fetch_merge_post(f"/companies/{company_slug}", patch)
+    return result or {}
+
+
+async def create_contact(payload: dict[str, Any]) -> dict:
+    """POST /v1/contacts — create a new contact record."""
+    return await post("/contacts", payload) or {}
+
+
+async def update_contact(contact_slug: str, patch: dict[str, Any]) -> dict:
+    """GET /contacts/{slug} → merge → POST /contacts/{slug}."""
+    result = await _fetch_merge_post(f"/contacts/{contact_slug}", patch)
+    return result or {}
+
+
+async def create_job(payload: dict[str, Any]) -> dict:
+    """POST /v1/jobs — create a new job requisition."""
+    return await post("/jobs", payload) or {}
+
+
+async def update_job(job_slug: str, patch: dict[str, Any]) -> dict:
+    """GET /jobs/{slug} → merge → POST /jobs/{slug}."""
+    result = await _fetch_merge_post(f"/jobs/{job_slug}", patch)
+    return result or {}
+
+
+async def create_candidate(payload: dict[str, Any]) -> dict:
+    """POST /v1/candidates — create a new candidate record."""
+    return await post("/candidates", payload) or {}
+
+
+async def update_candidate(candidate_slug: str, patch: dict[str, Any]) -> dict:
+    """GET /candidates/{slug} → merge → POST /candidates/{slug}.
+
+    Uses ``_fetch_merge_post`` so the required ``first_name`` is preserved
+    when not explicitly set in the patch.
+    """
+    result = await _fetch_merge_post(f"/candidates/{candidate_slug}", patch)
+    return result or {}
+
+
+# ---------------------------------------------------------------------------
+# Meeting edit / note delete
+# ---------------------------------------------------------------------------
+
+
+async def update_meeting(meeting_id: int, patch: dict[str, Any]) -> dict:
+    """GET /meetings/{id} → merge → POST /meetings/{id}."""
+    result = await _fetch_merge_post(f"/meetings/{meeting_id}", patch)
+    return result or {}
+
+
+async def delete_note(note_id: int) -> None:
+    """DELETE /v1/notes/{id}."""
+    await delete(f"/notes/{note_id}")
+
+
+# ---------------------------------------------------------------------------
+# Assignment trio — candidate/job linkage
+# ---------------------------------------------------------------------------
+
+
+async def assign_candidate(candidate_slug: str, job_slug: str) -> dict:
+    """POST /v1/candidates/{candidate_slug}/assign?job_slug={job_slug}.
+
+    The target job is passed as a query param, NOT in the body.
+    """
+    return await post(
+        f"/candidates/{candidate_slug}/assign",
+        params={"job_slug": job_slug},
+    ) or {}
+
+
+async def unassign_candidate(candidate_slug: str, job_slug: str) -> dict:
+    """POST /v1/candidates/{candidate_slug}/unassign?job_slug={job_slug}.
+
+    The target job is passed as a query param, NOT in the body.
+    """
+    return await post(
+        f"/candidates/{candidate_slug}/unassign",
+        params={"job_slug": job_slug},
+    ) or {}
+
+
+async def update_hiring_stage(
+    candidate_slug: str,
+    job_slug: str,
+    body: dict[str, Any],
+) -> dict:
+    """POST /v1/candidates/{candidate_slug}/hiring-stages/{job_slug}.
+
+    Both slugs are in the path (note the plural ``hiring-stages``).
+    Body carries ``status_id`` plus optional ``remark``/``stage_date``/
+    ``updated_by``/``create_placement``.
+    """
+    return await post(
+        f"/candidates/{candidate_slug}/hiring-stages/{job_slug}",
+        body,
+    ) or {}
+
+
+# ---------------------------------------------------------------------------
+# File upload
+# ---------------------------------------------------------------------------
+
+
+async def upload_file(
+    file_url: str,
+    related_to: str,
+    related_to_type: str,
+    folder: str,
+) -> dict:
+    """POST /v1/files — multipart upload of a file by public URL.
+
+    The ``files[]`` form field accepts either a public URL or a file upload;
+    we support the URL form here. Uploading binary files would require the
+    tool caller to stream bytes, which MCP doesn't expose cleanly.
+    """
+    form = {
+        "related_to": related_to,
+        "related_to_type": related_to_type,
+        "folder": folder,
+    }
+    # httpx multipart text-part shape: (filename, content). Passing filename=None
+    # sends the value as a plain form field under the `files[]` key.
+    files = {"files[]": (None, file_url)}
+    return await post_multipart("/files", form, files) or {}

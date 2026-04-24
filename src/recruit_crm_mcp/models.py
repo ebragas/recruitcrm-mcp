@@ -275,11 +275,75 @@ class AssignedCandidateSummary(CandidateSummary):
 
 
 # ---------------------------------------------------------------------------
-# Input models (for write operations)
+# Input/result models
 # ---------------------------------------------------------------------------
 
 
-class CustomField(BaseModel):
+class EntityRef(BaseModel):
+    """Reference to a CRM entity for `related_to`-style linkage."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: RelatedToType
+    id: str
+
+
+class Associations(BaseModel):
+    """Cross-post a note/task/meeting to additional entities beyond `related_to`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: list[str] = []
+    companies: list[str] = []
+    contacts: list[str] = []
+    jobs: list[str] = []
+    deals: list[str] = []
+
+
+class LookupItem(BaseModel):
+    """Compact {id, label} returned from list_*_types-style lookups."""
+
+    id: int
+    label: str
+
+    @classmethod
+    def from_api_response(cls, data: dict) -> LookupItem:
+        return cls(id=data.get("id"), label=data.get("label") or "")
+
+
+WriteKind = Literal[
+    "note",
+    "task",
+    "meeting",
+    "contact",
+    "company",
+    "job",
+    "candidate",
+    "assignment",
+    "file",
+]
+
+
+class WriteResult(BaseModel):
+    """Compact success response from a write tool."""
+
+    kind: WriteKind
+    id: str
+    title: str | None = None
+    url: str | None = None
+
+
+class CustomFieldValue(BaseModel):
+    """A single custom-field write: ``{field_id, value}``.
+
+    Used by every ``set_*_custom_fields`` tool and by direct ``custom_fields=[...]``
+    kwargs on update_company / update_contact / update_job / update_candidate.
+    Matches the inline shape accepted by the live API's edit endpoints
+    (Recruit CRM does NOT use a separate ``/associated-fields`` sub-endpoint
+    for company/contact/candidate custom fields — that path is only used by the
+    candidate-on-job application-questions flow).
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     field_id: int
@@ -290,106 +354,38 @@ class NoteCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     description: str
-    related_to: str
-    related_to_type: RelatedToType
+    related_to: EntityRef
     note_type_id: int | None = None
-    associated_candidate: str | None = None
-    associated_company: str | None = None
-    associated_contact: str | None = None
-    associated_job: str | None = None
-    associated_deal: str | None = None
-    created_by: int | None = None
+    associated: Associations = Associations()
 
 
 class TaskCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str
-    reminder: int
     start_date: str
+    reminder: int = 1440
     description: str | None = None
     task_type_id: int | None = None
-    related_to: str | None = None
-    related_to_type: RelatedToType | None = None
-    associated_candidate: str | None = None
-    associated_company: str | None = None
-    associated_contact: str | None = None
-    associated_job: str | None = None
-    associated_deal: str | None = None
     owner_id: int | None = None
+    related_to: EntityRef | None = None
+    associated: Associations = Associations()
 
 
 class MeetingCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str
-    reminder: int
     start_date: str
     end_date: str
+    related_to: EntityRef
+    attendee_contacts: list[str] = []
+    attendee_candidates: list[str] = []
+    attendee_users: list[int] = []
     description: str | None = None
-    meeting_type_id: int | None = None
     address: str | None = None
-    related_to: str | None = None
-    related_to_type: RelatedToType | None = None
-    attendee_candidate: str | None = None
-    attendee_company: str | None = None
-    attendee_contact: str | None = None
-    associated_candidate: str | None = None
-    associated_company: str | None = None
-    associated_contact: str | None = None
-    associated_job: str | None = None
-    associated_deal: str | None = None
+    meeting_type_id: int | None = None
+    reminder: int = -1
     owner_id: int | None = None
-
-
-class CandidateCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    first_name: str
-    last_name: str | None = None
-    email: str | None = None
-    position: str | None = None
-    contact_number: str | None = None
-    city: str | None = None
-    state: str | None = None
-    country: str | None = None
-    linkedin: str | None = None
-    current_organization: str | None = None
-    skill: str | None = None
-    source: str | None = None
-    candidate_summary: str | None = None
-    owner_id: int | None = None
-    custom_fields: list[CustomField] | None = None
-
-
-class ContactCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    first_name: str
-    last_name: str
-    email: str | None = None
-    contact_number: str | None = None
-    designation: str | None = None
-    company_slug: str | None = None
-    city: str | None = None
-    state: str | None = None
-    country: str | None = None
-    linkedin: str | None = None
-    stage_id: int | None = None
-    owner_id: int | None = None
-    custom_fields: list[CustomField] | None = None
-
-
-class CompanyCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    company_name: str
-    about_company: str | None = None
-    website: str | None = None
-    industry_id: int | None = None
-    city: str | None = None
-    state: str | None = None
-    country: str | None = None
-    linkedin: str | None = None
-    owner_id: int | None = None
-    custom_fields: list[CustomField] | None = None
+    associated: Associations = Associations()
+    do_not_send_calendar_invites: bool = True

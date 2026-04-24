@@ -985,7 +985,7 @@ class TestRateLimitRetry:
 
     @pytest.mark.anyio
     async def test_raises_on_second_429(self, monkeypatch):
-        """Both requests return 429 — should raise HTTPStatusError."""
+        """Both requests return 429 — should raise RecruitCrmError."""
         rate_limited_1 = _make_response(429, headers={"Retry-After": "0"})
         rate_limited_2 = _make_response(429, headers={"Retry-After": "0"})
 
@@ -994,7 +994,7 @@ class TestRateLimitRetry:
         monkeypatch.setattr(client, "_client", mock_client)
 
         with patch("recruit_crm_mcp.client.anyio.sleep"):
-            with pytest.raises(httpx.HTTPStatusError):
+            with pytest.raises(client.RecruitCrmError):
                 await client.get("/test")
 
     @pytest.mark.anyio
@@ -1019,7 +1019,7 @@ class TestRateLimitRetry:
         mock_client.request = AsyncMock(return_value=error_resp)
         monkeypatch.setattr(client, "_client", mock_client)
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(client.RecruitCrmError):
             await client.get("/test")
         assert mock_client.request.call_count == 1
 
@@ -1104,7 +1104,7 @@ class TestRequestBase:
 
     @pytest.mark.anyio
     async def test_raises_on_second_429(self, monkeypatch):
-        """Both requests return 429 — raises HTTPStatusError."""
+        """Both requests return 429 — raises RecruitCrmError."""
         rate_limited_1 = _make_response(429, headers={"Retry-After": "0"})
         rate_limited_2 = _make_response(429, headers={"Retry-After": "0"})
 
@@ -1113,7 +1113,7 @@ class TestRequestBase:
         monkeypatch.setattr(client, "_client", mock_client)
 
         with patch("recruit_crm_mcp.client.anyio.sleep"):
-            with pytest.raises(httpx.HTTPStatusError):
+            with pytest.raises(client.RecruitCrmError):
                 await client._request("POST", "/test", data={"x": 1})
 
     @pytest.mark.anyio
@@ -1142,7 +1142,7 @@ class TestRequestBase:
         mock_client.request = AsyncMock(return_value=error_resp)
         monkeypatch.setattr(client, "_client", mock_client)
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(client.RecruitCrmError):
             await client._request("GET", "/test")
         assert mock_client.request.call_count == 1
 
@@ -1259,3 +1259,876 @@ class TestDelete:
 
         assert result is None
         assert mock_client.request.call_count == 2
+
+
+class TestRecruitCrmError:
+    """Tests for the structured RecruitCrmError raised on non-2xx responses."""
+
+    @pytest.mark.anyio
+    async def test_400_with_json_body(self, monkeypatch):
+        """400 with JSON body exposes parsed dict on .body."""
+        error_body = {"message": "Validation failed", "errors": {"title": ["required"]}}
+        error_resp = _make_response(400, json_body=error_body)
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=error_resp)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with pytest.raises(client.RecruitCrmError) as exc_info:
+            await client._request("POST", "/notes", data={"x": 1})
+
+        assert exc_info.value.status == 400
+        assert exc_info.value.body == error_body
+
+    @pytest.mark.anyio
+    async def test_422_with_plain_text_body(self, monkeypatch):
+        """422 with a non-JSON body falls back to the response text."""
+        text_body = "Unprocessable Entity"
+        error_resp = httpx.Response(
+            status_code=422,
+            headers={"content-type": "text/plain"},
+            content=text_body.encode(),
+            request=httpx.Request("POST", "https://api.recruitcrm.io/v1/test"),
+        )
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=error_resp)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with pytest.raises(client.RecruitCrmError) as exc_info:
+            await client._request("POST", "/notes", data={"x": 1})
+
+        assert exc_info.value.status == 422
+        assert exc_info.value.body == text_body
+
+    @pytest.mark.anyio
+    async def test_500_with_empty_body(self, monkeypatch):
+        """500 with an empty body sets .body to None."""
+        error_resp = httpx.Response(
+            status_code=500,
+            headers={},
+            content=b"",
+            request=httpx.Request("GET", "https://api.recruitcrm.io/v1/test"),
+        )
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=error_resp)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with pytest.raises(client.RecruitCrmError) as exc_info:
+            await client._request("GET", "/notes")
+
+        assert exc_info.value.status == 500
+        assert exc_info.value.body is None
+
+    @pytest.mark.anyio
+    async def test_error_message_includes_method_and_path(self, monkeypatch):
+        """str(error) includes the HTTP method and path for debugging."""
+        error_resp = _make_response(400, json_body={"msg": "bad"})
+        mock_client = AsyncMock()
+        mock_client.request = AsyncMock(return_value=error_resp)
+        monkeypatch.setattr(client, "_client", mock_client)
+
+        with pytest.raises(client.RecruitCrmError) as exc_info:
+            await client._request("POST", "/notes", data={"x": 1})
+
+        message = str(exc_info.value)
+        assert "POST" in message
+        assert "/notes" in message
+        assert exc_info.value.method == "POST"
+        assert exc_info.value.path == "/notes"
+
+
+class TestJoin:
+    """Tests for the _join helper."""
+
+    def test_empty_list_returns_none(self):
+        assert client._join([]) is None
+
+    def test_none_returns_none(self):
+        assert client._join(None) is None
+
+    def test_single_value(self):
+        assert client._join(["a"]) == "a"
+
+    def test_multiple_values(self):
+        assert client._join(["a", "b", "c"]) == "a,b,c"
+
+
+class TestFetchMergePost:
+    """Tests for the _fetch_merge_post helper."""
+
+    @pytest.mark.anyio
+    async def test_happy_path_strips_keys_and_applies_patch(self, monkeypatch):
+        """Merged body omits id/slug and applies the patch, preserving other fields."""
+        current = {
+            "id": 5,
+            "slug": "x",
+            "title": "old",
+            "description": "d",
+            "status": "o",
+        }
+
+        async def mock_get(path, params=None):
+            assert path == "/notes/5"
+            return current
+
+        posted: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            posted["path"] = path
+            posted["data"] = data
+            return {"id": 5, "slug": "x", **data}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        monkeypatch.setattr(client, "post", mock_post)
+
+        result = await client._fetch_merge_post("/notes/5", {"status": "c"})
+
+        assert posted["path"] == "/notes/5"
+        assert "id" not in posted["data"]
+        assert "slug" not in posted["data"]
+        assert posted["data"]["status"] == "c"
+        assert posted["data"]["description"] == "d"
+        assert posted["data"]["title"] == "old"
+        assert result["status"] == "c"
+
+    @pytest.mark.anyio
+    async def test_patch_with_none_values_is_ignored(self, monkeypatch):
+        """None values in patch should not overwrite existing fields."""
+        current = {
+            "id": 5,
+            "slug": "x",
+            "title": "old",
+            "status": "o",
+        }
+
+        async def mock_get(path, params=None):
+            return current
+
+        posted: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            posted["data"] = data
+            return {**data}
+
+        monkeypatch.setattr(client, "get", mock_get)
+        monkeypatch.setattr(client, "post", mock_post)
+
+        await client._fetch_merge_post("/notes/5", {"title": None, "status": "c"})
+
+        assert posted["data"]["title"] == "old"
+        assert posted["data"]["status"] == "c"
+
+    @pytest.mark.anyio
+    async def test_get_returning_non_dict_raises(self, monkeypatch):
+        """If GET doesn't return a dict, raise RecruitCrmError."""
+        async def mock_get(path, params=None):
+            return [{"id": 1}]
+
+        async def mock_post(path, data=None, params=None):
+            raise AssertionError("post should not be called")
+
+        monkeypatch.setattr(client, "get", mock_get)
+        monkeypatch.setattr(client, "post", mock_post)
+
+        with pytest.raises(client.RecruitCrmError) as exc_info:
+            await client._fetch_merge_post("/notes/5", {"status": "c"})
+
+        assert exc_info.value.status == 500
+        assert exc_info.value.method == "GET"
+        assert exc_info.value.path == "/notes/5"
+
+
+class TestListNoteTypes:
+    @pytest.mark.anyio
+    async def test_happy_path(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/note-types"
+            return [{"id": 1, "label": "Note"}, {"id": 2, "label": "Call"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_note_types()
+        assert len(results) == 2
+        assert results[0]["id"] == 1
+        assert results[0]["label"] == "Note"
+
+
+class TestListMeetingTypes:
+    @pytest.mark.anyio
+    async def test_happy_path(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/meeting-types"
+            return [{"id": 1, "label": "Client Meeting"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_meeting_types()
+        assert len(results) == 1
+        assert results[0]["label"] == "Client Meeting"
+
+
+class TestListTaskTypes:
+    @pytest.mark.anyio
+    async def test_happy_path(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/task-types"
+            return [{"id": 1, "label": "Follow up"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_task_types()
+        assert len(results) == 1
+        assert results[0]["label"] == "Follow up"
+
+
+class TestListHiringPipelines:
+    @pytest.mark.anyio
+    async def test_maps_name_to_label(self, monkeypatch):
+        """API returns {id, name} — we normalize name → label."""
+        async def mock_get(path, params=None):
+            assert path == "/hiring-pipelines"
+            return [{"id": 0, "name": "Master Hiring Pipeline"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_hiring_pipelines()
+        assert len(results) == 1
+        assert results[0]["id"] == 0
+        assert results[0]["label"] == "Master Hiring Pipeline"
+
+
+class TestListHiringPipelineStages:
+    @pytest.mark.anyio
+    async def test_passes_pipeline_id_in_url(self, monkeypatch):
+        """The pipeline_id must appear in the URL path."""
+        async def mock_get(path, params=None):
+            assert path == "/hiring-pipelines/7"
+            return [{"status_id": 56, "label": "Lead"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_hiring_pipeline_stages(7)
+        assert len(results) == 1
+        assert results[0]["id"] == 56
+        assert results[0]["label"] == "Lead"
+
+    @pytest.mark.anyio
+    async def test_master_pipeline_id_zero(self, monkeypatch):
+        """pipeline_id=0 targets the master hiring pipeline."""
+        async def mock_get(path, params=None):
+            assert path == "/hiring-pipelines/0"
+            return [{"status_id": 1, "label": "Applied"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_hiring_pipeline_stages(0)
+        assert results[0]["id"] == 1
+
+
+class TestListContactStages:
+    @pytest.mark.anyio
+    async def test_maps_stage_id_to_id(self, monkeypatch):
+        """API returns {stage_id, label} — we normalize stage_id → id."""
+        async def mock_get(path, params=None):
+            assert path == "/sales-pipeline"
+            return [{"stage_id": 56, "label": "Lead"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_contact_stages()
+        assert len(results) == 1
+        assert results[0]["id"] == 56
+        assert results[0]["label"] == "Lead"
+
+
+class TestListIndustries:
+    @pytest.mark.anyio
+    async def test_maps_industry_id_to_id(self, monkeypatch):
+        """API returns {industry_id, label} — we normalize industry_id → id."""
+        async def mock_get(path, params=None):
+            assert path == "/industries"
+            return [{"industry_id": 6, "label": "Apparel and Fashion"}]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_industries()
+        assert len(results) == 1
+        assert results[0]["id"] == 6
+        assert results[0]["label"] == "Apparel and Fashion"
+
+
+class TestListCompanyCustomFields:
+    @pytest.mark.anyio
+    async def test_maps_field_id_and_field_name(self, monkeypatch):
+        """Custom fields use field_id/field_name — normalize to id/label, keep extras."""
+        async def mock_get(path, params=None):
+            assert path == "/custom-fields/companies"
+            return [
+                {
+                    "field_id": 1,
+                    "entity_type": "company",
+                    "field_name": "Revenue",
+                    "field_type": "text",
+                    "default_value": None,
+                },
+            ]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_company_custom_fields()
+        assert len(results) == 1
+        assert results[0]["id"] == 1
+        assert results[0]["label"] == "Revenue"
+        # Extra fields preserved
+        assert results[0]["field_type"] == "text"
+        assert results[0]["entity_type"] == "company"
+
+
+class TestListContactCustomFields:
+    @pytest.mark.anyio
+    async def test_maps_field_id_and_field_name(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/custom-fields/contacts"
+            return [
+                {
+                    "field_id": 2,
+                    "entity_type": "contact",
+                    "field_name": "Hobbies",
+                    "field_type": "text",
+                },
+            ]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_contact_custom_fields()
+        assert len(results) == 1
+        assert results[0]["id"] == 2
+        assert results[0]["label"] == "Hobbies"
+        assert results[0]["field_type"] == "text"
+
+
+class TestListJobCustomFields:
+    @pytest.mark.anyio
+    async def test_maps_field_id_and_field_name(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/custom-fields/jobs"
+            return [
+                {
+                    "field_id": 3,
+                    "entity_type": "job",
+                    "field_name": "Priority",
+                    "field_type": "select",
+                },
+            ]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_job_custom_fields()
+        assert len(results) == 1
+        assert results[0]["id"] == 3
+        assert results[0]["label"] == "Priority"
+        assert results[0]["field_type"] == "select"
+
+
+class TestListCandidateCustomFields:
+    @pytest.mark.anyio
+    async def test_maps_field_id_and_field_name(self, monkeypatch):
+        async def mock_get(path, params=None):
+            assert path == "/custom-fields/candidates"
+            return [
+                {
+                    "field_id": 4,
+                    "entity_type": "candidate",
+                    "field_name": "GitHub",
+                    "field_type": "url",
+                },
+            ]
+
+        monkeypatch.setattr(client, "get", mock_get)
+        results = await client.list_candidate_custom_fields()
+        assert len(results) == 1
+        assert results[0]["id"] == 4
+        assert results[0]["label"] == "GitHub"
+        assert results[0]["field_type"] == "url"
+
+
+class TestCreateMeeting:
+    @pytest.mark.anyio
+    async def test_posts_to_meetings_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            return {"id": 1, "title": "Intro"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        payload = {"title": "Intro", "start_date": "2025-04-29T18:30:00Z"}
+        result = await client.create_meeting(payload)
+
+        assert captured["path"] == "/meetings"
+        assert captured["data"] == payload
+        assert result["id"] == 1
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        assert await client.create_meeting({"title": "x"}) == {}
+
+
+class TestCreateNote:
+    @pytest.mark.anyio
+    async def test_posts_to_notes_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            return {"id": 7}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        payload = {"description": "hi", "related_to": "cand-1", "related_to_type": "candidate"}
+        result = await client.create_note(payload)
+
+        assert captured["path"] == "/notes"
+        assert captured["data"] == payload
+        assert result["id"] == 7
+
+
+class TestCreateTask:
+    @pytest.mark.anyio
+    async def test_posts_to_tasks_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            return {"id": 9, "title": "Follow up"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        payload = {"title": "Follow up", "start_date": "2025-05-01T09:00:00Z", "reminder": 1440}
+        result = await client.create_task(payload)
+
+        assert captured["path"] == "/tasks"
+        assert captured["data"] == payload
+        assert result["id"] == 9
+
+
+class TestUpdateTask:
+    @pytest.mark.anyio
+    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_fmp(path, patch):
+            captured["path"] = path
+            captured["patch"] = patch
+            return {"id": 42, "status": patch.get("status")}
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_task(42, {"status": "c"})
+
+        assert captured["path"] == "/tasks/42"
+        assert captured["patch"] == {"status": "c"}
+        assert result["id"] == 42
+        assert result["status"] == "c"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
+        async def mock_fmp(path, patch):
+            return None
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_task(1, {"status": "c"})
+        assert result == {}
+
+
+class TestCreateCompany:
+    @pytest.mark.anyio
+    async def test_posts_to_companies_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            return {"slug": "acme", "company_name": "Acme"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        payload = {"company_name": "Acme", "city": "NYC"}
+        result = await client.create_company(payload)
+
+        assert captured["path"] == "/companies"
+        assert captured["data"] == payload
+        assert result["slug"] == "acme"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        assert await client.create_company({"company_name": "x"}) == {}
+
+
+class TestUpdateCompany:
+    @pytest.mark.anyio
+    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_fmp(path, patch):
+            captured["path"] = path
+            captured["patch"] = patch
+            return {"slug": "acme", "city": patch.get("city")}
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_company("acme", {"city": "Boston"})
+
+        assert captured["path"] == "/companies/acme"
+        assert captured["patch"] == {"city": "Boston"}
+        assert result["city"] == "Boston"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
+        async def mock_fmp(path, patch):
+            return None
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_company("acme", {"city": "x"})
+        assert result == {}
+
+
+class TestCreateContact:
+    @pytest.mark.anyio
+    async def test_posts_to_contacts_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            return {"slug": "jdoe"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        payload = {"first_name": "Jane", "last_name": "Doe"}
+        result = await client.create_contact(payload)
+
+        assert captured["path"] == "/contacts"
+        assert captured["data"] == payload
+        assert result["slug"] == "jdoe"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        assert await client.create_contact({"first_name": "x", "last_name": "y"}) == {}
+
+
+class TestUpdateContact:
+    @pytest.mark.anyio
+    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_fmp(path, patch):
+            captured["path"] = path
+            captured["patch"] = patch
+            return {"slug": "jdoe", "email": patch.get("email")}
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_contact("jdoe", {"email": "j@x.com"})
+
+        assert captured["path"] == "/contacts/jdoe"
+        assert captured["patch"] == {"email": "j@x.com"}
+        assert result["email"] == "j@x.com"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
+        async def mock_fmp(path, patch):
+            return None
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_contact("jdoe", {"email": "x"})
+        assert result == {}
+
+
+class TestCreateJob:
+    @pytest.mark.anyio
+    async def test_posts_to_jobs_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            return {"slug": "job-1", "name": "Eng"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        payload = {
+            "name": "Eng",
+            "company_slug": "acme",
+            "contact_slug": "jdoe",
+            "number_of_openings": 1,
+            "currency_id": 1,
+            "enable_job_application_form": 0,
+            "job_description_text": "<p>hi</p>",
+        }
+        result = await client.create_job(payload)
+
+        assert captured["path"] == "/jobs"
+        assert captured["data"] == payload
+        assert result["slug"] == "job-1"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        assert await client.create_job({"name": "x"}) == {}
+
+
+class TestUpdateJob:
+    @pytest.mark.anyio
+    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_fmp(path, patch):
+            captured["path"] = path
+            captured["patch"] = patch
+            return {"slug": "job-1", "job_status": patch.get("job_status")}
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_job("job-1", {"job_status": 2})
+
+        assert captured["path"] == "/jobs/job-1"
+        assert captured["patch"] == {"job_status": 2}
+        assert result["job_status"] == 2
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
+        async def mock_fmp(path, patch):
+            return None
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_job("job-1", {"job_status": 2})
+        assert result == {}
+
+
+class TestCreateCandidate:
+    @pytest.mark.anyio
+    async def test_posts_to_candidates_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            return {"slug": "cand-1", "first_name": "Jane"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        payload = {"first_name": "Jane"}
+        result = await client.create_candidate(payload)
+
+        assert captured["path"] == "/candidates"
+        assert captured["data"] == payload
+        assert result["slug"] == "cand-1"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        assert await client.create_candidate({"first_name": "x"}) == {}
+
+
+class TestUpdateCandidate:
+    @pytest.mark.anyio
+    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_fmp(path, patch):
+            captured["path"] = path
+            captured["patch"] = patch
+            return {"slug": "cand-1", "position": patch.get("position")}
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_candidate("cand-1", {"position": "Engineer"})
+
+        assert captured["path"] == "/candidates/cand-1"
+        assert captured["patch"] == {"position": "Engineer"}
+        assert result["position"] == "Engineer"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
+        async def mock_fmp(path, patch):
+            return None
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_candidate("cand-1", {"position": "x"})
+        assert result == {}
+
+
+class TestUpdateMeeting:
+    @pytest.mark.anyio
+    async def test_delegates_to_fetch_merge_post(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_fmp(path, patch):
+            captured["path"] = path
+            captured["patch"] = patch
+            return {"id": 7, "title": patch.get("title")}
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_meeting(7, {"title": "Updated"})
+
+        assert captured["path"] == "/meetings/7"
+        assert captured["patch"] == {"title": "Updated"}
+        assert result["title"] == "Updated"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_fmp_returns_none(self, monkeypatch):
+        async def mock_fmp(path, patch):
+            return None
+
+        monkeypatch.setattr(client, "_fetch_merge_post", mock_fmp)
+        result = await client.update_meeting(1, {"title": "x"})
+        assert result == {}
+
+
+class TestDeleteNote:
+    @pytest.mark.anyio
+    async def test_calls_delete_with_notes_path(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_delete(path, params=None):
+            captured["path"] = path
+            captured["params"] = params
+            return None
+
+        monkeypatch.setattr(client, "delete", mock_delete)
+        result = await client.delete_note(42)
+
+        assert captured["path"] == "/notes/42"
+        assert result is None
+
+
+class TestAssignCandidate:
+    @pytest.mark.anyio
+    async def test_posts_with_job_slug_as_query_param(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            captured["params"] = params
+            return {"candidate_slug": "cand-1", "shared_list_url": "https://..."}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        result = await client.assign_candidate("cand-1", "job-1")
+
+        assert captured["path"] == "/candidates/cand-1/assign"
+        assert captured["params"] == {"job_slug": "job-1"}
+        # Body MUST NOT carry job_slug — the API expects it as a query param only
+        assert captured["data"] is None
+        assert result["candidate_slug"] == "cand-1"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        assert await client.assign_candidate("cand-1", "job-1") == {}
+
+
+class TestUnassignCandidate:
+    @pytest.mark.anyio
+    async def test_posts_with_job_slug_as_query_param(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            captured["params"] = params
+            return {"candidate_slug": "cand-1"}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        result = await client.unassign_candidate("cand-1", "job-1")
+
+        assert captured["path"] == "/candidates/cand-1/unassign"
+        assert captured["params"] == {"job_slug": "job-1"}
+        assert captured["data"] is None
+        assert result["candidate_slug"] == "cand-1"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        assert await client.unassign_candidate("cand-1", "job-1") == {}
+
+
+class TestUpdateHiringStage:
+    @pytest.mark.anyio
+    async def test_both_slugs_in_path_and_body_forwarded(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post(path, data=None, params=None):
+            captured["path"] = path
+            captured["data"] = data
+            captured["params"] = params
+            return {"candidate_slug": "cand-1", "status_id": data["status_id"]}
+
+        monkeypatch.setattr(client, "post", mock_post)
+        body = {"status_id": 5, "remark": "phone screen passed"}
+        result = await client.update_hiring_stage("cand-1", "job-1", body)
+
+        # Note the plural "hiring-stages" and both slugs in the path
+        assert captured["path"] == "/candidates/cand-1/hiring-stages/job-1"
+        assert captured["data"] == body
+        assert captured["params"] is None
+        assert result["status_id"] == 5
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_returns_none(self, monkeypatch):
+        async def mock_post(path, data=None, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post", mock_post)
+        result = await client.update_hiring_stage("cand-1", "job-1", {"status_id": 1})
+        assert result == {}
+
+
+class TestUploadFile:
+    @pytest.mark.anyio
+    async def test_posts_multipart_to_files_endpoint(self, monkeypatch):
+        captured: dict = {}
+
+        async def mock_post_multipart(path, form, files, params=None):
+            captured["path"] = path
+            captured["form"] = form
+            captured["files"] = files
+            captured["params"] = params
+            return {"file_link": "https://cdn/x.pdf", "file_name": "x.pdf"}
+
+        monkeypatch.setattr(client, "post_multipart", mock_post_multipart)
+        result = await client.upload_file(
+            file_url="https://example.com/resume.pdf",
+            related_to="cand-1",
+            related_to_type="candidate",
+            folder="Resumes",
+        )
+
+        assert captured["path"] == "/files"
+        assert captured["form"] == {
+            "related_to": "cand-1",
+            "related_to_type": "candidate",
+            "folder": "Resumes",
+        }
+        # httpx multipart text-part shape: (filename=None, content=url_string)
+        assert captured["files"] == {"files[]": (None, "https://example.com/resume.pdf")}
+        assert result["file_link"] == "https://cdn/x.pdf"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_dict_when_post_multipart_returns_none(self, monkeypatch):
+        async def mock_post_multipart(path, form, files, params=None):
+            return None
+
+        monkeypatch.setattr(client, "post_multipart", mock_post_multipart)
+        result = await client.upload_file(
+            file_url="https://x.com/f.pdf",
+            related_to="cand-1",
+            related_to_type="candidate",
+            folder="Uploads",
+        )
+        assert result == {}
