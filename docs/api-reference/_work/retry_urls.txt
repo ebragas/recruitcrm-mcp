@@ -1,0 +1,15 @@
+https://docs.recruitcrm.io/docs/rcrm-api-reference/1815c56bcbc41-edit-education-history
+https://docs.recruitcrm.io/docs/rcrm-api-reference/4e97401ad2234-question-and-answers-of-candidate
+https://docs.recruitcrm.io/docs/rcrm-api-reference/5d35fa49b332d-delete-a-contact
+https://docs.recruitcrm.io/docs/rcrm-api-reference/671e42107de3b-edit-a-contact
+https://docs.recruitcrm.io/docs/rcrm-api-reference/86cc17c5746bc-search-for-deals
+https://docs.recruitcrm.io/docs/rcrm-api-reference/c44e8779214d0-edit-a-note
+https://docs.recruitcrm.io/docs/rcrm-api-reference/a90ff5ddf8b5d-creates-a-new-hotlist
+https://docs.recruitcrm.io/docs/rcrm-api-reference/3c43bcfa9e026-find-hotlist-by-id
+https://docs.recruitcrm.io/docs/rcrm-api-reference/25689761e393c-edit-a-hotlist
+https://docs.recruitcrm.io/docs/rcrm-api-reference/546b7b57719d3-show-all-invoice-custom-fields
+https://docs.recruitcrm.io/docs/rcrm-api-reference/66a18c8b3b6e8-delete-a-placement
+https://docs.recruitcrm.io/docs/rcrm-api-reference/cbba7f7c0d312-enroll-candidate
+https://docs.recruitcrm.io/docs/rcrm-api-reference/7a94bafe42f7f-search-for-sequences
+https://docs.recruitcrm.io/docs/rcrm-api-reference/1885baf84f86b-search-placements
+https://docs.recruitcrm.io/docs/rcrm-api-reference/388c00ec02e26-get-candidate-questions

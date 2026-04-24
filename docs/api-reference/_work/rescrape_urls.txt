@@ -1,0 +1,2 @@
+https://docs.recruitcrm.io/docs/rcrm-api-reference/7a94bafe42f7f-search-for-sequences
+https://docs.recruitcrm.io/docs/rcrm-api-reference/db2609e77ca90-delete-a-deal
