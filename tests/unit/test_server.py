@@ -895,15 +895,15 @@ class TestUpdateTaskTool:
         async def mock_update_task(task_id, patch):
             captured["task_id"] = task_id
             captured["patch"] = patch
-            return {"id": task_id, "title": "x", "status": patch.get("status")}
+            return {"id": task_id, "title": patch.get("title", "x")}
 
         from recruit_crm_mcp import server
         monkeypatch.setattr(server.client, "update_task", mock_update_task)
 
-        result = await update_task(task_id=42, status="c")
+        result = await update_task(task_id=42, title="renamed")
 
         assert captured["task_id"] == 42
-        assert captured["patch"] == {"status": "c"}
+        assert captured["patch"] == {"title": "renamed"}
         assert isinstance(result, WriteResult)
         assert result.kind == "task"
         assert result.id == "42"
@@ -925,7 +925,6 @@ class TestUpdateTaskTool:
             title="New title",
             start_date="2025-06-01T00:00:00Z",
             description="d",
-            status="o",
             owner_id=1234,
         )
 
@@ -934,7 +933,6 @@ class TestUpdateTaskTool:
             "title": "New title",
             "start_date": "2025-06-01T00:00:00Z",
             "description": "d",
-            "status": "o",
             "owner_id": 1234,
         }
 
@@ -1735,19 +1733,19 @@ class TestWriteToolErrorSurfacing:
     async def test_update_task_surfaces_field_validation(self, monkeypatch):
         async def mock_update_task(task_id, patch):
             raise RecruitCrmError(
-                422, {"status": ["invalid value"]}, "POST", "/tasks/42"
+                422, {"title": ["must not be blank"]}, "POST", "/tasks/42"
             )
 
         from recruit_crm_mcp import server
         monkeypatch.setattr(server.client, "update_task", mock_update_task)
 
         with pytest.raises(ToolError) as excinfo:
-            await update_task(task_id=42, status="bogus")
+            await update_task(task_id=42, title="")
 
         msg = str(excinfo.value)
         assert "422" in msg
-        assert "status" in msg
-        assert "invalid value" in msg
+        assert "title" in msg
+        assert "must not be blank" in msg
 
     @pytest.mark.anyio
     async def test_update_meeting_surfaces_non_dict_body(self, monkeypatch):

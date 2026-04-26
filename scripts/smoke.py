@@ -45,7 +45,11 @@ async def run_smoke(from_pypi: bool, exercise_writes: bool) -> int:
         print(f"[smoke] ping ok (version={ping.structured_content.get('version')})")
 
         note_types = await c.call_tool("list_note_types", {})
-        print(f"[smoke] list_note_types returned {len(note_types.structured_content.get('result', []))} types")
+        # FastMCP wraps list-returning tools' structured_content in {"result": [...]}
+        # for the protocol, but direct-dict tools surface the dict. Normalize.
+        sc = note_types.structured_content
+        note_types_list = sc.get("result", sc) if isinstance(sc, dict) else sc
+        print(f"[smoke] list_note_types returned {len(note_types_list or [])} types")
 
         if exercise_writes:
             print("[smoke] exercising write round-trip (candidate → note → delete both)")

@@ -270,7 +270,8 @@ async def test_create_task_with_related_to_and_task_type(mcp_client, monkeypatch
 
 
 # ---------------------------------------------------------------------------
-# update_task — None dropping, status forwarded (per CLAUDE.md gotcha)
+# update_task — None dropping (status field intentionally NOT exposed; see
+# CLAUDE.md gotcha: API silently ignores task status writes)
 # ---------------------------------------------------------------------------
 
 
@@ -280,13 +281,13 @@ async def test_update_task_drops_none_and_forwards_provided(mcp_client, monkeypa
 
     result = await mcp_client.call_tool(
         "update_task",
-        {"task_id": 42, "title": "new-title", "status": "c", "task_type_id": 2},
+        {"task_id": 42, "title": "new-title", "task_type_id": 2},
     )
 
     assert not result.is_error
     assert captured["slug_or_id"] == 42
     patch = captured["payload"]
-    assert patch == {"title": "new-title", "status": "c", "task_type_id": 2}
+    assert patch == {"title": "new-title", "task_type_id": 2}
 
 
 # ---------------------------------------------------------------------------

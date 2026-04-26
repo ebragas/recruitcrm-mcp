@@ -2,9 +2,12 @@
 ``do_not_send_calendar_invites`` flag on POST /v1/meetings.
 
 The Recruit CRM docs (docs/api-reference/creates-a-new-meeting.md) describe
-the field as a string ("1"/"0"). Our server code currently passes a Python
-``bool``. These tests verify what the live API actually accepts so we don't
-silently misbehave and accidentally spam real calendar invites.
+the field as a string ("1"/"0"). Our MCP server tools (log_meeting,
+update_meeting) now serialize Python bools to those strings before sending,
+because the live API rejects JSON ``false`` with 422. These tests intentionally
+exercise the raw client payloads — not the server tools — to lock in what
+the live API accepts so we don't silently misbehave and accidentally spam
+real calendar invites.
 
 All meetings are scheduled far in the future (2030) so they don't clutter
 current schedules, and use ``@example.invalid`` domains for any external-looking

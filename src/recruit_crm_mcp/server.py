@@ -687,22 +687,21 @@ async def update_task(
     title: str | None = None,
     start_date: str | None = None,
     description: str | None = None,
-    status: str | None = None,
     task_type_id: int | None = None,
     owner_id: int | None = None,
 ) -> WriteResult:
-    """Update an existing task via GET+merge+POST on /v1/tasks/{id}.
+    """Update an existing task via partial POST to /v1/tasks/{id}.
 
     Only non-None fields are forwarded; omitted fields are preserved.
-    ``status`` accepts ``"o"`` (open) or ``"c"`` (complete).
     ``task_type_id`` is the integer ID from ``list_task_types``; omit to keep
-    current type.
+    current type. NOTE: marking a task complete is not supported by the
+    Recruit CRM API on this endpoint — the ``status`` field is silently
+    ignored (see CLAUDE.md). Delete the task or use the RCRM UI instead.
     """
     patch = _build_payload({
         "title": title,
         "start_date": start_date,
         "description": description,
-        "status": status,
         "task_type_id": task_type_id,
         "owner_id": owner_id,
     })
@@ -772,10 +771,10 @@ async def update_company(
     owner_id: int | None = None,
     custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
-    """Update a company via GET+merge+POST on /v1/companies/{slug}.
+    """Update a company via partial POST to /v1/companies/{slug}.
 
-    Only non-None fields are forwarded; omitted fields are preserved from the
-    current record (the API's required ``company_name`` is kept automatically).
+    Only non-None fields are forwarded; omitted fields are preserved server-side
+    (the API's required ``company_name`` is kept automatically).
     """
     patch = _build_payload(
         {
@@ -880,9 +879,9 @@ async def update_contact(
     owner_id: int | None = None,
     custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
-    """Update a contact via GET+merge+POST on /v1/contacts/{slug}.
+    """Update a contact via partial POST to /v1/contacts/{slug}.
 
-    Only non-None fields are forwarded; omitted fields are preserved.
+    Only non-None fields are forwarded; omitted fields are preserved server-side.
     """
     patch = _build_payload(
         {
@@ -996,7 +995,9 @@ async def update_job(
     note_for_candidates: str | None = None,
     custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
-    """Update a job requisition via GET+merge+POST on /v1/jobs/{slug}.
+    """Update a job requisition via partial POST to /v1/jobs/{slug}.
+
+    Only non-None fields are forwarded; omitted fields are preserved server-side.
 
     Only the fields most commonly edited are exposed; use the full ``create_job``
     surface area if you need to change other fields.
@@ -1109,10 +1110,10 @@ async def update_candidate(
     owner_id: int | None = None,
     custom_fields: list[CustomFieldValue] | None = None,
 ) -> WriteResult:
-    """Update a candidate via GET+merge+POST on /v1/candidates/{slug}.
+    """Update a candidate via partial POST to /v1/candidates/{slug}.
 
-    Only non-None fields are forwarded; omitted fields are preserved from the
-    current record (the API's required ``first_name`` is kept automatically).
+    Only non-None fields are forwarded; omitted fields are preserved server-side
+    (the API's required ``first_name`` is kept automatically).
     """
     patch = _build_payload(
         {
@@ -1174,11 +1175,11 @@ async def update_meeting(
     associated: Associations | None = None,
     do_not_send_calendar_invites: bool | None = None,
 ) -> WriteResult:
-    """Update a meeting via GET+merge+POST on /v1/meetings/{id}.
+    """Update a meeting via partial POST to /v1/meetings/{id}.
 
-    Only non-None fields are forwarded; omitted fields are preserved. Attendee
-    and association lists are joined into comma-separated strings to match the
-    create-endpoint shape.
+    Only non-None fields are forwarded; omitted fields are preserved server-side.
+    Attendee and association lists are joined into comma-separated strings to
+    match the create-endpoint shape.
     """
     fields: dict = {
         "title": title,
