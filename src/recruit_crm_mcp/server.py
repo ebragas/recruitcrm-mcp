@@ -4,6 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from importlib.metadata import version, PackageNotFoundError
+from typing import Literal
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -931,7 +932,7 @@ async def create_job(
     enable_job_application_form: int,
     job_description_text: str,
     job_status: int | None = None,
-    job_location_type: int | None = None,
+    job_location_type: Literal["0", "1", "2"] | None = None,
     city: str | None = None,
     state: str | None = None,
     country: str | None = None,
@@ -988,7 +989,7 @@ async def update_job(
     slug: str,
     name: str | None = None,
     job_status: int | None = None,
-    job_location_type: int | None = None,
+    job_location_type: Literal["0", "1", "2"] | None = None,
     min_annual_salary: int | None = None,
     max_annual_salary: int | None = None,
     owner_id: int | None = None,

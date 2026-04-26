@@ -1205,7 +1205,7 @@ class TestCreateJobTool:
             enable_job_application_form=0,
             job_description_text="<p>desc</p>",
             job_status=1,
-            job_location_type=1,
+            job_location_type="1",
             min_annual_salary=100000,
             custom_fields=[CustomFieldValue(field_id=1, value="v")],
         )
@@ -1219,7 +1219,7 @@ class TestCreateJobTool:
         assert payload["enable_job_application_form"] == 0
         assert payload["job_description_text"] == "<p>desc</p>"
         assert payload["job_status"] == 1
-        assert payload["job_location_type"] == 1
+        assert payload["job_location_type"] == "1"
         assert payload["min_annual_salary"] == 100000
         assert payload["custom_fields"] == [{"field_id": 1, "value": "v"}]
         # Optional fields omitted
