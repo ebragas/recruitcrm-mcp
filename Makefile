@@ -1,4 +1,4 @@
-.PHONY: setup venv clean test coverage integration-test integration-sweep mcp-test mcp-live-test smoke lint check fetch-docs
+.PHONY: setup venv clean test coverage integration-test integration-test-keep integration-sweep mcp-test mcp-live-test smoke lint check fetch-docs
 
 setup: venv
 	git config core.hooksPath .githooks
@@ -20,6 +20,9 @@ coverage:
 
 integration-test:
 	uv run pytest -m integration --tb=short
+
+integration-test-keep:
+	RECRUIT_CRM_KEEP_ENTITIES=1 uv run pytest -m integration --tb=short -v -s
 
 integration-sweep:
 	uv run python -m tests.integration._sweep

@@ -32,6 +32,40 @@ async def reset_client():
     await client.aclose_client()
 
 
+@pytest.fixture(autouse=True)
+def _maybe_keep_entities(monkeypatch):
+    """When ``RECRUIT_CRM_KEEP_ENTITIES=1`` is set, no-op every ``client.delete``
+    and ``client.delete_note`` call so test entities persist in the tenant
+    for UI verification. Implies ``RECRUIT_CRM_SKIP_SWEEP=1`` (otherwise the
+    session sweep would delete the entities you wanted to inspect).
+
+    Run ``make integration-sweep`` afterwards to clean up.
+
+    Stepping workflow:
+        # 1. List node IDs
+        uv run pytest -m integration --collect-only -q
+        # 2. Run one test, leave entities for inspection
+        RECRUIT_CRM_KEEP_ENTITIES=1 uv run pytest <node_id> -v -s
+        # 3. Verify in the Recruit CRM UI
+        # 4. Clean up
+        make integration-sweep
+    """
+    if not os.environ.get("RECRUIT_CRM_KEEP_ENTITIES"):
+        return
+    os.environ.setdefault("RECRUIT_CRM_SKIP_SWEEP", "1")
+
+    async def _noop_delete(path, params=None):
+        print(f"[keep] would DELETE {path} — skipped")
+        return None
+
+    async def _noop_delete_note(note_id):
+        print(f"[keep] would DELETE /notes/{note_id} — skipped")
+        return None
+
+    monkeypatch.setattr(client, "delete", _noop_delete)
+    monkeypatch.setattr(client, "delete_note", _noop_delete_note)
+
+
 @pytest.fixture(scope="session", autouse=True)
 async def _orphan_sweep_session():
     """Session-end orphan sweep — backstop cleanup for any test whose own
