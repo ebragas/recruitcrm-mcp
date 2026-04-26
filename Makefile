@@ -1,4 +1,4 @@
-.PHONY: setup venv clean test coverage integration-test mcp-test mcp-live-test smoke lint check fetch-docs
+.PHONY: setup venv clean test coverage integration-test integration-sweep mcp-test mcp-live-test smoke lint check fetch-docs
 
 setup: venv
 	git config core.hooksPath .githooks
@@ -20,6 +20,9 @@ coverage:
 
 integration-test:
 	uv run pytest -m integration --tb=short
+
+integration-sweep:
+	uv run python -m tests.integration._sweep
 
 mcp-test:
 	uv run pytest tests/mcp -m "not mcp_live"

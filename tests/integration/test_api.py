@@ -22,6 +22,7 @@ from recruit_crm_mcp.models import (
     TaskSummary,
     UserSummary,
 )
+from tests.integration.conftest import _test_label
 
 
 def _parse_dt(value: str) -> datetime:
@@ -1259,8 +1260,9 @@ class TestWrites:
     """
 
     async def test_create_note_round_trip(self, test_candidate):
+        description = _test_label("Note")
         payload = {
-            "description": "MCP integration test note",
+            "description": description,
             "related_to": test_candidate,
             "related_to_type": "candidate",
         }
@@ -1270,15 +1272,16 @@ class TestWrites:
         try:
             fetched = await client.get_note(note_id)
             assert fetched["id"] == note_id
-            assert fetched.get("description") == "MCP integration test note"
+            assert fetched.get("description") == description
             assert fetched.get("related_to") == test_candidate
             assert fetched.get("related_to_type") == "candidate"
         finally:
             await client.delete(f"/notes/{note_id}")
 
     async def test_create_task_round_trip_and_update(self, test_candidate):
+        title = _test_label("Task")
         payload = {
-            "title": "MCP integration test task",
+            "title": title,
             "start_date": "2030-01-01T09:00:00Z",
             "reminder": -1,
             "related_to": test_candidate,
@@ -1290,7 +1293,7 @@ class TestWrites:
         try:
             fetched = await client.get_task(task_id)
             assert fetched["id"] == task_id
-            assert fetched.get("title") == "MCP integration test task"
+            assert fetched.get("title") == title
 
             # update_task round-trip — change the description
             updated = await client.update_task(task_id, {"description": "updated"})
@@ -1307,8 +1310,9 @@ class TestWrites:
         other fields survive. Per edit-task.md every body field is optional, so
         the API is expected to support true partial updates.
         """
+        title = _test_label("PreserveTask")
         payload = {
-            "title": "MCP preserve-test task",
+            "title": title,
             "description": "original description",
             "start_date": "2030-01-01T09:00:00Z",
             "reminder": 1440,
@@ -1324,7 +1328,7 @@ class TestWrites:
             assert fetched.get("description") == "patched description", (
                 f"description not updated: {fetched.get('description')!r}"
             )
-            assert fetched.get("title") == "MCP preserve-test task", (
+            assert fetched.get("title") == title, (
                 f"title not preserved: {fetched.get('title')!r}"
             )
             assert fetched.get("related_to") == test_candidate, (
@@ -1342,8 +1346,9 @@ class TestWrites:
     async def test_log_meeting_round_trip(self, test_candidate):
         # No attendees/users — belt-and-suspenders for the "no invites" guarantee,
         # even if do_not_send_calendar_invites is misinterpreted by the API.
+        title = _test_label("Meeting")
         payload = {
-            "title": "MCP integration test meeting",
+            "title": title,
             "start_date": "2030-01-01T09:00:00Z",
             "end_date": "2030-01-01T10:00:00Z",
             "reminder": -1,
@@ -1357,7 +1362,7 @@ class TestWrites:
         try:
             fetched = await client.get_meeting(meeting_id)
             assert fetched["id"] == meeting_id
-            assert fetched.get("title") == "MCP integration test meeting"
+            assert fetched.get("title") == title
             # API may serialize this as bool, int, or string — accept any truthy form.
             flag = fetched.get("do_not_send_calendar_invites")
             assert flag in (True, 1, "1", "true"), (
@@ -1384,9 +1389,8 @@ class TestWriteSurface:
     """
 
     async def test_create_update_company_round_trip(self):
-        ts = _ts()
         created = await client.create_company({
-            "company_name": f"MCP Test {ts}",
+            "company_name": _test_label("CompanyRT"),
             "about_company": "x",
             "website": "https://example.invalid",
         })
@@ -1402,12 +1406,11 @@ class TestWriteSurface:
             await client.delete(f"/companies/{slug}")
 
     async def test_create_update_contact_round_trip(self):
-        ts = _ts()
-        email = f"mcp-test-{ts}@example.invalid"
+        first_name = _test_label("ContactRT")
         created = await client.create_contact({
-            "first_name": "MCP",
-            "last_name": f"Test-{ts}",
-            "email": email,
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
         })
         slug = created.get("slug")
         assert slug, f"Expected slug in create-contact response, got {created!r}"
@@ -1422,21 +1425,20 @@ class TestWriteSurface:
             await client.delete(f"/contacts/{slug}")
 
     async def test_create_update_job_round_trip(self):
-        ts = _ts()
-        company_resp = await client.create_company({"company_name": f"MCP Test Co {ts}"})
+        company_resp = await client.create_company({"company_name": _test_label("JobRTCo")})
         company_slug = company_resp.get("slug")
         assert company_slug, f"Expected company slug, got {company_resp!r}"
         try:
             contact_resp = await client.create_contact({
-                "first_name": "MCP",
-                "last_name": f"Contact-{ts}",
+                "first_name": _test_label("JobRTContact"),
+                "last_name": "Fixture",
                 "company_slug": company_slug,
             })
             contact_slug = contact_resp.get("slug")
             assert contact_slug, f"Expected contact slug, got {contact_resp!r}"
             try:
                 job_resp = await client.create_job({
-                    "name": f"MCP Test Job {ts}",
+                    "name": _test_label("JobRT"),
                     "company_slug": company_slug,
                     "contact_slug": contact_slug,
                     "number_of_openings": 1,
@@ -1462,11 +1464,11 @@ class TestWriteSurface:
             await client.delete(f"/companies/{company_slug}")
 
     async def test_create_update_candidate_round_trip(self):
-        ts = _ts()
+        first_name = _test_label("CandidateRT")
         created = await client.create_candidate({
-            "first_name": "MCP",
-            "last_name": f"Candidate-{ts}",
-            "email": f"mcp-cand-{ts}@example.invalid",
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
         })
         slug = created.get("slug")
         assert slug, f"Expected slug in create-candidate response, got {created!r}"
@@ -1483,9 +1485,8 @@ class TestWriteSurface:
         from recruit_crm_mcp.models import EntityRef
         from recruit_crm_mcp.server import log_meeting, update_meeting
 
-        ts = _ts()
-        original_title = f"MCP meeting {ts}"
-        new_title = f"MCP meeting {ts} (updated)"
+        original_title = _test_label("MeetingRT")
+        new_title = f"{original_title} (updated)"
         created = await log_meeting(
             title=original_title,
             start_date="2030-01-01T09:00:00Z",
@@ -1507,7 +1508,7 @@ class TestWriteSurface:
 
     async def test_delete_note_removes_note(self, test_candidate):
         payload = {
-            "description": f"MCP delete-note test {_ts()}",
+            "description": _test_label("DeleteNote"),
             "related_to": test_candidate,
             "related_to_type": "candidate",
         }
@@ -1556,12 +1557,11 @@ class TestCustomFieldsWrites:
             pytest.skip("Tenant has no company custom fields")
         field_id = fields[0]["id"]
 
-        ts = _ts()
-        company = await client.create_company({"company_name": f"MCP CF Co {ts}"})
+        company = await client.create_company({"company_name": _test_label("CFCo")})
         slug = company.get("slug")
         assert slug, f"Expected slug, got {company!r}"
         try:
-            test_value = f"mcp-{ts}"
+            test_value = _test_label("CFVal")
             result = await set_company_custom_fields(
                 slug=slug,
                 fields=[CustomFieldValue(field_id=field_id, value=test_value)],
@@ -1584,16 +1584,16 @@ class TestCustomFieldsWrites:
             pytest.skip("Tenant has no contact custom fields")
         field_id = fields[0]["id"]
 
-        ts = _ts()
+        first_name = _test_label("CFContact")
         contact = await client.create_contact({
-            "first_name": "MCP",
-            "last_name": f"CF-{ts}",
-            "email": f"mcp-cf-{ts}@example.invalid",
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
         })
         slug = contact.get("slug")
         assert slug, f"Expected slug, got {contact!r}"
         try:
-            test_value = f"mcp-{ts}"
+            test_value = _test_label("CFVal")
             result = await set_contact_custom_fields(
                 slug=slug,
                 fields=[CustomFieldValue(field_id=field_id, value=test_value)],
@@ -1616,22 +1616,21 @@ class TestCustomFieldsWrites:
             pytest.skip("Tenant has no job custom fields")
         field_id = fields[0]["id"]
 
-        ts = _ts()
         # Job requires company + contact; build throwaway anchors.
-        company = await client.create_company({"company_name": f"MCP CF-Job Co {ts}"})
+        company = await client.create_company({"company_name": _test_label("CFJobCo")})
         company_slug = company.get("slug")
         assert company_slug, f"Expected company slug, got {company!r}"
         try:
             contact = await client.create_contact({
-                "first_name": "MCP",
-                "last_name": f"CF-Job-{ts}",
+                "first_name": _test_label("CFJobContact"),
+                "last_name": "Fixture",
                 "company_slug": company_slug,
             })
             contact_slug = contact.get("slug")
             assert contact_slug, f"Expected contact slug, got {contact!r}"
             try:
                 job = await client.create_job({
-                    "name": f"MCP CF Job {ts}",
+                    "name": _test_label("CFJob"),
                     "company_slug": company_slug,
                     "contact_slug": contact_slug,
                     "number_of_openings": 1,
@@ -1642,7 +1641,7 @@ class TestCustomFieldsWrites:
                 job_slug = job.get("slug")
                 assert job_slug, f"Expected job slug, got {job!r}"
                 try:
-                    test_value = f"mcp-{ts}"
+                    test_value = _test_label("CFVal")
                     result = await set_job_custom_fields(
                         slug=job_slug,
                         fields=[CustomFieldValue(field_id=field_id, value=test_value)],
@@ -1669,16 +1668,16 @@ class TestCustomFieldsWrites:
             pytest.skip("Tenant has no candidate custom fields")
         field_id = fields[0]["id"]
 
-        ts = _ts()
+        first_name = _test_label("CFCand")
         candidate = await client.create_candidate({
-            "first_name": "MCP",
-            "last_name": f"CF-Cand-{ts}",
-            "email": f"mcp-cf-cand-{ts}@example.invalid",
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
         })
         slug = candidate.get("slug")
         assert slug, f"Expected slug, got {candidate!r}"
         try:
-            test_value = f"mcp-{ts}"
+            test_value = _test_label("CFVal")
             result = await set_candidate_custom_fields(
                 slug=slug,
                 fields=[CustomFieldValue(field_id=field_id, value=test_value)],
@@ -1698,21 +1697,20 @@ class TestAssignmentWrites:
 
     async def test_assign_and_unassign_candidate(self, test_candidate):
         # Build a throwaway company + contact + job to avoid polluting real records.
-        ts = _ts()
-        company = await client.create_company({"company_name": f"MCP Assign Co {ts}"})
+        company = await client.create_company({"company_name": _test_label("AssignCo")})
         company_slug = company.get("slug")
         assert company_slug, f"Expected company slug, got {company!r}"
         try:
             contact = await client.create_contact({
-                "first_name": "MCP",
-                "last_name": f"Assign-{ts}",
+                "first_name": _test_label("AssignContact"),
+                "last_name": "Fixture",
                 "company_slug": company_slug,
             })
             contact_slug = contact.get("slug")
             assert contact_slug, f"Expected contact slug, got {contact!r}"
             try:
                 job = await client.create_job({
-                    "name": f"MCP Assign Job {ts}",
+                    "name": _test_label("AssignJob"),
                     "company_slug": company_slug,
                     "contact_slug": contact_slug,
                     "number_of_openings": 1,
@@ -1753,21 +1751,20 @@ class TestAssignmentWrites:
         if status_id is None:
             pytest.skip("Master pipeline stage lacks an id")
 
-        ts = _ts()
-        company = await client.create_company({"company_name": f"MCP Stage Co {ts}"})
+        company = await client.create_company({"company_name": _test_label("StageCo")})
         company_slug = company.get("slug")
         assert company_slug, f"Expected company slug, got {company!r}"
         try:
             contact = await client.create_contact({
-                "first_name": "MCP",
-                "last_name": f"Stage-{ts}",
+                "first_name": _test_label("StageContact"),
+                "last_name": "Fixture",
                 "company_slug": company_slug,
             })
             contact_slug = contact.get("slug")
             assert contact_slug, f"Expected contact slug, got {contact!r}"
             try:
                 job = await client.create_job({
-                    "name": f"MCP Stage Job {ts}",
+                    "name": _test_label("StageJob"),
                     "company_slug": company_slug,
                     "contact_slug": contact_slug,
                     "number_of_openings": 1,

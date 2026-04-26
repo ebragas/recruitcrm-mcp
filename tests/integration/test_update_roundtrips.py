@@ -22,6 +22,8 @@ import pytest
 
 from recruit_crm_mcp import client
 
+from tests.integration.conftest import _test_label
+
 pytestmark = [pytest.mark.anyio, pytest.mark.integration]
 
 
@@ -129,8 +131,9 @@ class TestUpdateMeetingRoundTrip:
     """Partial POST to /meetings/{id} preserves omitted fields."""
 
     async def test_partial_update_preserves_other_fields(self, test_candidate):
+        title = _test_label("UpdateMeetingRT")
         payload = {
-            "title": "MCP update-roundtrip meeting",
+            "title": title,
             "description": "original description",
             "start_date": "2030-01-01T09:00:00Z",
             "end_date": "2030-01-01T10:00:00Z",
@@ -152,7 +155,7 @@ class TestUpdateMeetingRoundTrip:
             assert fetched.get("description") == "patched description", (
                 f"description not updated: {fetched.get('description')!r}"
             )
-            assert fetched.get("title") == "MCP update-roundtrip meeting", (
+            assert fetched.get("title") == title, (
                 f"title not preserved: {fetched.get('title')!r}"
             )
             assert fetched.get("related_to") == test_candidate, (

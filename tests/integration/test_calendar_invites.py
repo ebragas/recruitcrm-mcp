@@ -18,6 +18,8 @@ import pytest
 
 from recruit_crm_mcp import client
 
+from tests.integration.conftest import _test_label
+
 pytestmark = [pytest.mark.anyio, pytest.mark.integration]
 
 
@@ -25,7 +27,7 @@ async def test_do_not_send_as_python_bool_accepted(test_candidate):
     """Submitting ``do_not_send_calendar_invites=True`` (Python bool) should
     be accepted by the API and round-trip as a truthy value."""
     payload = {
-        "title": "MCP calendar-invite probe (bool True)",
+        "title": _test_label("InviteBoolTrue"),
         "start_date": "2030-01-01T09:00:00Z",
         "end_date": "2030-01-01T10:00:00Z",
         "reminder": -1,
@@ -52,7 +54,7 @@ async def test_do_not_send_as_string_one_accepted(test_candidate):
     """Submitting ``do_not_send_calendar_invites="1"`` (string per docs) should
     also be accepted by the API and round-trip as a truthy value."""
     payload = {
-        "title": "MCP calendar-invite probe (string '1')",
+        "title": _test_label("InviteStrOne"),
         "start_date": "2030-01-01T09:00:00Z",
         "end_date": "2030-01-01T10:00:00Z",
         "reminder": -1,
@@ -87,7 +89,7 @@ async def test_do_not_send_python_false_is_rejected(test_candidate):
     from recruit_crm_mcp.client import RecruitCrmError
 
     payload = {
-        "title": "MCP calendar-invite probe (bool False)",
+        "title": _test_label("InviteBoolFalse"),
         "start_date": "2030-01-01T09:00:00Z",
         "end_date": "2030-01-01T10:00:00Z",
         "reminder": -1,
@@ -110,7 +112,7 @@ async def test_do_not_send_string_zero_allows_invite_field(test_candidate):
     by design.
     """
     payload = {
-        "title": "MCP calendar-invite probe (string 0)",
+        "title": _test_label("InviteStrZero"),
         "start_date": "2030-01-01T09:00:00Z",
         "end_date": "2030-01-01T10:00:00Z",
         "reminder": -1,

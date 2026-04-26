@@ -15,12 +15,12 @@ coverage builds a full company/contact/job chain inline since no
 ``test_job`` fixture exists.
 """
 
-import uuid
-
 import pytest
 
 from recruit_crm_mcp import client
 from recruit_crm_mcp.client import RecruitCrmError
+
+from tests.integration.conftest import _test_label
 
 pytestmark = [pytest.mark.anyio, pytest.mark.integration]
 
@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.anyio, pytest.mark.integration]
 async def test_create_note_for_contact(test_contact):
     """Anchor a note to a contact — verifies ``related_to_type='contact'``."""
     created = await client.create_note({
-        "description": "MCP variant test (contact anchor)",
+        "description": _test_label("VariantContactNote"),
         "related_to": test_contact,
         "related_to_type": "contact",
     })
@@ -46,7 +46,7 @@ async def test_create_note_for_contact(test_contact):
 async def test_create_note_for_company(test_company):
     """Anchor a note to a company — verifies ``related_to_type='company'``."""
     created = await client.create_note({
-        "description": "MCP variant test (company anchor)",
+        "description": _test_label("VariantCompanyNote"),
         "related_to": test_company,
         "related_to_type": "company",
     })
@@ -69,7 +69,9 @@ async def test_create_note_for_job():
     ``currency_id`` and ``contact_slug``). All entities are torn down in
     reverse creation order (note -> job -> contact -> company).
     """
-    label = f"MCP-Test-{uuid.uuid4().hex[:8]}"
+    company_label = _test_label("VariantJobCo")
+    contact_label = _test_label("VariantJobContact")
+    job_label = _test_label("VariantJob")
 
     company_slug = None
     contact_slug = None
@@ -77,7 +79,7 @@ async def test_create_note_for_job():
     note_id = None
     try:
         # (a) company to satisfy company_slug on the job
-        company_resp = await client.post("/companies", {"company_name": label})
+        company_resp = await client.post("/companies", {"company_name": company_label})
         company_slug = (
             company_resp.get("slug") if isinstance(company_resp, dict) else None
         )
@@ -88,9 +90,9 @@ async def test_create_note_for_job():
         # The job API requires the contact to be already linked to the company
         # (422 otherwise), so we pass company_slug on the contact create.
         contact_resp = await client.post("/contacts", {
-            "first_name": label,
+            "first_name": contact_label,
             "last_name": "JobOwner",
-            "email": f"{label.lower()}-owner@example.invalid",
+            "email": f"{contact_label.lower()}@example.invalid",
             "company_slug": company_slug,
         })
         contact_slug = (
@@ -102,7 +104,7 @@ async def test_create_note_for_job():
         # (c) job itself
         try:
             job_resp = await client.post("/jobs", {
-                "name": label,
+                "name": job_label,
                 "number_of_openings": 1,
                 "company_slug": company_slug,
                 "contact_slug": contact_slug,
@@ -120,7 +122,7 @@ async def test_create_note_for_job():
             pytest.skip(f"Could not create test job: {job_resp!r}")
 
         created = await client.create_note({
-            "description": "MCP variant test (job anchor)",
+            "description": _test_label("VariantJobNote"),
             "related_to": job_slug,
             "related_to_type": "job",
         })
@@ -163,7 +165,7 @@ async def test_create_note_rejects_invalid_related_to_type(test_candidate):
     """
     with pytest.raises(RecruitCrmError) as exc_info:
         await client.create_note({
-            "description": "reject me",
+            "description": _test_label("RejectNote"),
             "related_to": test_candidate,
             "related_to_type": "banana",
         })
@@ -193,7 +195,7 @@ async def test_log_meeting_attendee_candidate_round_trips(test_candidate):
         }
     """
     created = await client.create_meeting({
-        "title": "MCP attendee round-trip",
+        "title": _test_label("VariantAttendeeMtg"),
         "start_date": "2030-01-01T09:00:00Z",
         "end_date": "2030-01-01T10:00:00Z",
         "reminder": -1,
