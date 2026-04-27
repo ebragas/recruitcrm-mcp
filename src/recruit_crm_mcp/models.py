@@ -40,6 +40,8 @@ class CandidateSummary(BaseModel):
 
 
 class JobSummary(BaseModel):
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
     slug: str | None = None
     name: str | None = None
     status: str | None = None
