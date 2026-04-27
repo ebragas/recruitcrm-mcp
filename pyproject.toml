@@ -48,7 +48,11 @@ src = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: tests that hit the live Recruit CRM API"]
+markers = [
+    "integration: tests that hit the live Recruit CRM API",
+    "mcp: tests that exercise the FastMCP in-process dispatch layer",
+    "mcp_live: mcp-layer tests that additionally hit the live Recruit CRM API",
+]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

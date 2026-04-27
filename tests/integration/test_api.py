@@ -7,20 +7,22 @@ Run with: make integration-test
 import os
 from datetime import datetime, timezone
 
-import httpx
 import pytest
 
 from recruit_crm_mcp import client
+from recruit_crm_mcp.client import RecruitCrmError
 from recruit_crm_mcp.models import (
     CandidateSummary,
     CompanySummary,
     ContactSummary,
     JobSummary,
+    LookupItem,
     MeetingSummary,
     NoteSummary,
     TaskSummary,
     UserSummary,
 )
+from tests.integration.conftest import _test_label
 
 
 def _parse_dt(value: str) -> datetime:
@@ -182,21 +184,21 @@ class TestSearchCandidateFilters:
 
     async def test_sort_by_rejected_on_search_endpoint(self):
         """The API rejects sort_by/sort_order on /candidates/search with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get(
                 "/candidates/search",
                 {"country": "United States", "sort_by": "updated_at"},
             )
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
     async def test_sort_by_rejected_on_list_endpoint(self):
         """The API rejects sort_by/sort_order on /candidates with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get(
                 "/candidates",
                 {"limit": 1, "sort_by": "updated_at", "sort_order": "desc"},
             )
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
     async def test_no_filters_fallback_succeeds(self):
         """Calling search_candidates with no filters should not 422."""
@@ -358,21 +360,21 @@ class TestSearchJobFilters:
 
     async def test_created_on_rejected(self):
         """The API rejects created_on param with 400."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/jobs/search", {"created_on": "2025-01-01"})
-        assert exc_info.value.response.status_code == 400
+        assert exc_info.value.status == 400
 
     async def test_updated_on_rejected(self):
         """The API rejects updated_on param with 400."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/jobs/search", {"updated_on": "2025-01-01"})
-        assert exc_info.value.response.status_code == 400
+        assert exc_info.value.status == 400
 
     async def test_owner_rejected(self):
         """The API rejects owner param (not owner_id) with 400."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/jobs/search", {"owner": 1})
-        assert exc_info.value.response.status_code == 400
+        assert exc_info.value.status == 400
 
 
 class TestGetAssignedCandidates:
@@ -554,9 +556,9 @@ class TestContacts:
 
     async def test_designation_rejected(self):
         """The API rejects designation param on /contacts/search with 400."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/contacts/search", {"designation": "VP Sales"})
-        assert exc_info.value.response.status_code == 400
+        assert exc_info.value.status == 400
 
 
 class TestSearchContacts:
@@ -689,15 +691,15 @@ class TestMeetings:
 
     async def test_related_to_rejected(self):
         """The API rejects related_to param on /meetings/search with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/meetings/search", {"related_to": "test-slug"})
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
     async def test_related_to_type_rejected(self):
         """The API rejects related_to_type param on /meetings/search with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/meetings/search", {"related_to_type": "candidate"})
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
 
 class TestSearchMeetings:
@@ -817,8 +819,8 @@ class TestCompanies:
             })
             results = client._extract_results(data)
             assert isinstance(results, list)
-        except httpx.HTTPStatusError as exc:
-            pytest.skip(f"sort_by rejected with {exc.response.status_code}")
+        except RecruitCrmError as exc:
+            pytest.skip(f"sort_by rejected with {exc.status}")
 
     async def test_owner_name_filter(self):
         """Probe if owner_name is accepted."""
@@ -826,8 +828,8 @@ class TestCompanies:
             data = await client.get("/companies/search", {"owner_name": "Test"})
             results = client._extract_results(data)
             assert isinstance(results, list)
-        except httpx.HTTPStatusError as exc:
-            pytest.skip(f"owner_name rejected with {exc.response.status_code}")
+        except RecruitCrmError as exc:
+            pytest.skip(f"owner_name rejected with {exc.status}")
 
     async def test_owner_email_filter(self):
         """Probe if owner_email is accepted."""
@@ -835,8 +837,8 @@ class TestCompanies:
             data = await client.get("/companies/search", {"owner_email": "test@example.com"})
             results = client._extract_results(data)
             assert isinstance(results, list)
-        except httpx.HTTPStatusError as exc:
-            pytest.skip(f"owner_email rejected with {exc.response.status_code}")
+        except RecruitCrmError as exc:
+            pytest.skip(f"owner_email rejected with {exc.status}")
 
     async def test_exact_search_filter(self):
         """Probe if exact_search is accepted."""
@@ -850,8 +852,8 @@ class TestCompanies:
             })
             results = client._extract_results(data)
             assert isinstance(results, list)
-        except httpx.HTTPStatusError as exc:
-            pytest.skip(f"exact_search rejected with {exc.response.status_code}")
+        except RecruitCrmError as exc:
+            pytest.skip(f"exact_search rejected with {exc.status}")
 
     async def test_marked_as_off_limit_filter(self):
         """Probe if marked_as_off_limit is accepted."""
@@ -859,8 +861,8 @@ class TestCompanies:
             data = await client.get("/companies/search", {"marked_as_off_limit": "false"})
             results = client._extract_results(data)
             assert isinstance(results, list)
-        except httpx.HTTPStatusError as exc:
-            pytest.skip(f"marked_as_off_limit rejected with {exc.response.status_code}")
+        except RecruitCrmError as exc:
+            pytest.skip(f"marked_as_off_limit rejected with {exc.status}")
 
 
 class TestSearchCompanies:
@@ -991,15 +993,15 @@ class TestTasks:
 
     async def test_related_to_rejected(self):
         """The API rejects related_to param on /tasks/search with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/tasks/search", {"related_to": "test-slug"})
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
     async def test_related_to_type_rejected(self):
         """The API rejects related_to_type param on /tasks/search with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/tasks/search", {"related_to_type": "candidate"})
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
 
 class TestSearchTasks:
@@ -1096,21 +1098,21 @@ class TestNotes:
 
     async def test_related_to_rejected(self):
         """The API rejects related_to param on /notes/search with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/notes/search", {"related_to": "test-slug"})
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
     async def test_related_to_type_rejected(self):
         """The API rejects related_to_type param on /notes/search with 422."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/notes/search", {"related_to_type": "candidate"})
-        assert exc_info.value.response.status_code == 422
+        assert exc_info.value.status == 422
 
     async def test_created_from_rejected(self):
         """The API rejects created_from param (uses added_from instead) with 400."""
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(RecruitCrmError) as exc_info:
             await client.get("/notes/search", {"created_from": "2020-01-01"})
-        assert exc_info.value.response.status_code == 400
+        assert exc_info.value.status == 400
 
 
 class TestSearchNotes:
@@ -1136,3 +1138,685 @@ class TestSearchNotes:
         results = await client.search_notes(limit=1)
         summary = NoteSummary.from_api_response(results[0])
         assert summary.id is not None
+
+
+class TestLookups:
+    """Integration tests for the 11 lookup endpoints."""
+
+    async def test_list_note_types(self):
+        results = await client.list_note_types()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            LookupItem.from_api_response(item)  # validates shape
+
+    async def test_list_meeting_types(self):
+        results = await client.list_meeting_types()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            LookupItem.from_api_response(item)
+
+    async def test_list_task_types(self):
+        results = await client.list_task_types()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            LookupItem.from_api_response(item)
+
+    async def test_list_hiring_pipelines(self):
+        results = await client.list_hiring_pipelines()
+        assert isinstance(results, list)
+        # Master pipeline (id=0) is always present on every tenant
+        assert len(results) > 0
+        item = results[0]
+        assert item.get("id") is not None
+        assert item.get("label")
+        LookupItem.from_api_response(item)
+
+    async def test_list_hiring_pipeline_stages_master(self):
+        """Master pipeline (id=0) should always return at least some stages."""
+        results = await client.list_hiring_pipeline_stages(0)
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            LookupItem.from_api_response(item)
+
+    async def test_list_contact_stages(self):
+        results = await client.list_contact_stages()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            LookupItem.from_api_response(item)
+
+    async def test_list_industries(self):
+        results = await client.list_industries()
+        assert isinstance(results, list)
+        # Industries list is a Recruit CRM platform default — always non-empty
+        assert len(results) > 0
+        item = results[0]
+        assert item.get("id") is not None
+        assert item.get("label")
+        LookupItem.from_api_response(item)
+
+    async def test_list_company_custom_fields(self):
+        results = await client.list_company_custom_fields()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            # field_type should be preserved from the API response
+            assert "field_type" in item
+            LookupItem.from_api_response(item)
+
+    async def test_list_contact_custom_fields(self):
+        results = await client.list_contact_custom_fields()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            assert "field_type" in item
+            LookupItem.from_api_response(item)
+
+    async def test_list_job_custom_fields(self):
+        results = await client.list_job_custom_fields()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            assert "field_type" in item
+            LookupItem.from_api_response(item)
+
+    async def test_list_candidate_custom_fields(self):
+        results = await client.list_candidate_custom_fields()
+        assert isinstance(results, list)
+        if results:
+            item = results[0]
+            assert item.get("id") is not None
+            assert item.get("label")
+            assert "field_type" in item
+            LookupItem.from_api_response(item)
+
+
+class TestWrites:
+    """Integration tests for the four PR 1 write tools.
+
+    Anchors use throwaway fixture entities (see tests/integration/conftest.py)
+    so writes never touch real tenant records. Each test also deletes its own
+    note/task/meeting in a try/finally.
+    """
+
+    async def test_create_note_round_trip(self, test_candidate):
+        description = _test_label("Note")
+        payload = {
+            "description": description,
+            "related_to": test_candidate,
+            "related_to_type": "candidate",
+        }
+        created = await client.create_note(payload)
+        note_id = created.get("id")
+        assert note_id, f"Expected id in create-note response, got {created!r}"
+        try:
+            fetched = await client.get_note(note_id)
+            assert fetched["id"] == note_id
+            assert fetched.get("description") == description
+            assert fetched.get("related_to") == test_candidate
+            assert fetched.get("related_to_type") == "candidate"
+        finally:
+            await client.delete(f"/notes/{note_id}")
+
+    async def test_create_task_round_trip_and_update(self, test_candidate):
+        title = _test_label("Task")
+        payload = {
+            "title": title,
+            "start_date": "2030-01-01T09:00:00Z",
+            "reminder": -1,
+            "related_to": test_candidate,
+            "related_to_type": "candidate",
+        }
+        created = await client.create_task(payload)
+        task_id = created.get("id")
+        assert task_id, f"Expected id in create-task response, got {created!r}"
+        try:
+            fetched = await client.get_task(task_id)
+            assert fetched["id"] == task_id
+            assert fetched.get("title") == title
+
+            # update_task round-trip — change the description
+            updated = await client.update_task(task_id, {"description": "updated"})
+            assert updated.get("id") == task_id
+            fetched = await client.get_task(task_id)
+            assert fetched.get("description") == "updated"
+        finally:
+            await client.delete(f"/tasks/{task_id}")
+
+    async def test_update_task_preserves_omitted_fields(self, test_candidate):
+        """Partial update should preserve fields not in the patch.
+
+        Creates a task with 5 fields, updates only ``description``, asserts all
+        other fields survive. Per edit-task.md every body field is optional, so
+        the API is expected to support true partial updates.
+        """
+        title = _test_label("PreserveTask")
+        payload = {
+            "title": title,
+            "description": "original description",
+            "start_date": "2030-01-01T09:00:00Z",
+            "reminder": 1440,
+            "related_to": test_candidate,
+            "related_to_type": "candidate",
+        }
+        created = await client.create_task(payload)
+        task_id = created.get("id")
+        assert task_id, f"create failed: {created!r}"
+        try:
+            await client.update_task(task_id, {"description": "patched description"})
+            fetched = await client.get_task(task_id)
+            assert fetched.get("description") == "patched description", (
+                f"description not updated: {fetched.get('description')!r}"
+            )
+            assert fetched.get("title") == title, (
+                f"title not preserved: {fetched.get('title')!r}"
+            )
+            assert fetched.get("related_to") == test_candidate, (
+                f"related_to not preserved: {fetched.get('related_to')!r}"
+            )
+            assert fetched.get("related_to_type") == "candidate", (
+                f"related_to_type not preserved: {fetched.get('related_to_type')!r}"
+            )
+            assert fetched.get("reminder") == 1440, (
+                f"reminder not preserved: {fetched.get('reminder')!r}"
+            )
+        finally:
+            await client.delete(f"/tasks/{task_id}")
+
+    async def test_log_meeting_round_trip(self, test_candidate):
+        # No attendees/users — belt-and-suspenders for the "no invites" guarantee,
+        # even if do_not_send_calendar_invites is misinterpreted by the API.
+        title = _test_label("Meeting")
+        payload = {
+            "title": title,
+            "start_date": "2030-01-01T09:00:00Z",
+            "end_date": "2030-01-01T10:00:00Z",
+            "reminder": -1,
+            "related_to": test_candidate,
+            "related_to_type": "candidate",
+            "do_not_send_calendar_invites": True,
+        }
+        created = await client.create_meeting(payload)
+        meeting_id = created.get("id")
+        assert meeting_id, f"Expected id in create-meeting response, got {created!r}"
+        try:
+            fetched = await client.get_meeting(meeting_id)
+            assert fetched["id"] == meeting_id
+            assert fetched.get("title") == title
+            # API may serialize this as bool, int, or string — accept any truthy form.
+            flag = fetched.get("do_not_send_calendar_invites")
+            assert flag in (True, 1, "1", "true"), (
+                f"Expected do_not_send_calendar_invites truthy, got {flag!r}"
+            )
+        finally:
+            await client.delete(f"/meetings/{meeting_id}")
+
+
+def _ts() -> str:
+    """Return a compact UTC timestamp (with microseconds) for unique test-entity suffixes.
+
+    Microsecond precision avoids collisions when tests retry within the same
+    second (second-level resolution caused flakes under concurrent / retried runs).
+    """
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+
+
+class TestWriteSurface:
+    """Integration tests for the Avery Knapp write-surface (CRUD + assignment + upload).
+
+    Every test cleans up via try/finally. The tests hit the live Recruit CRM
+    tenant — stray records are a real problem.
+    """
+
+    async def test_create_update_company_round_trip(self):
+        created = await client.create_company({
+            "company_name": _test_label("CompanyRT"),
+            "about_company": "x",
+            "website": "https://example.invalid",
+        })
+        slug = created.get("slug")
+        assert slug, f"Expected slug in create-company response, got {created!r}"
+        try:
+            updated = await client.update_company(slug, {"about_company": "y"})
+            assert updated.get("slug") == slug
+            fetched = await client.get_company(slug)
+            assert fetched.get("slug") == slug
+            assert fetched.get("about_company") == "y"
+        finally:
+            await client.delete(f"/companies/{slug}")
+
+    async def test_create_update_contact_round_trip(self):
+        first_name = _test_label("ContactRT")
+        created = await client.create_contact({
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
+        })
+        slug = created.get("slug")
+        assert slug, f"Expected slug in create-contact response, got {created!r}"
+        try:
+            new_designation = "Updated by MCP test"
+            updated = await client.update_contact(slug, {"designation": new_designation})
+            assert updated.get("slug") == slug
+            fetched = await client.get_contact(slug)
+            assert fetched.get("slug") == slug
+            assert fetched.get("designation") == new_designation
+        finally:
+            await client.delete(f"/contacts/{slug}")
+
+    async def test_create_update_job_round_trip(self):
+        company_resp = await client.create_company({"company_name": _test_label("JobRTCo")})
+        company_slug = company_resp.get("slug")
+        assert company_slug, f"Expected company slug, got {company_resp!r}"
+        try:
+            contact_resp = await client.create_contact({
+                "first_name": _test_label("JobRTContact"),
+                "last_name": "Fixture",
+                "company_slug": company_slug,
+            })
+            contact_slug = contact_resp.get("slug")
+            assert contact_slug, f"Expected contact slug, got {contact_resp!r}"
+            try:
+                job_resp = await client.create_job({
+                    "name": _test_label("JobRT"),
+                    "company_slug": company_slug,
+                    "contact_slug": contact_slug,
+                    "number_of_openings": 1,
+                    "currency_id": 1,
+                    "enable_job_application_form": 0,
+                    "job_description_text": "Test job",
+                })
+                job_slug = job_resp.get("slug")
+                assert job_slug, f"Expected job slug, got {job_resp!r}"
+                try:
+                    updated = await client.update_job(
+                        job_slug, {"note_for_candidates": "updated"}
+                    )
+                    assert updated.get("slug") == job_slug
+                    fetched = await client.get_job(job_slug)
+                    assert fetched.get("slug") == job_slug
+                    assert fetched.get("note_for_candidates") == "updated"
+                finally:
+                    await client.delete(f"/jobs/{job_slug}")
+            finally:
+                await client.delete(f"/contacts/{contact_slug}")
+        finally:
+            await client.delete(f"/companies/{company_slug}")
+
+    async def test_create_update_candidate_round_trip(self):
+        first_name = _test_label("CandidateRT")
+        created = await client.create_candidate({
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
+        })
+        slug = created.get("slug")
+        assert slug, f"Expected slug in create-candidate response, got {created!r}"
+        try:
+            updated = await client.update_candidate(slug, {"position": "Updated by MCP"})
+            assert updated.get("slug") == slug
+            fetched = await client.get_candidate(slug)
+            assert fetched.get("slug") == slug
+            assert fetched.get("position") == "Updated by MCP"
+        finally:
+            await client.delete(f"/candidates/{slug}")
+
+    async def test_update_meeting_round_trip(self, test_candidate):
+        from recruit_crm_mcp.models import EntityRef
+        from recruit_crm_mcp.server import log_meeting, update_meeting
+
+        original_title = _test_label("MeetingRT")
+        new_title = f"{original_title} (updated)"
+        created = await log_meeting(
+            title=original_title,
+            start_date="2030-01-01T09:00:00Z",
+            end_date="2030-01-01T10:00:00Z",
+            related_to=EntityRef(kind="candidate", id=test_candidate),
+            reminder=-1,
+            do_not_send_calendar_invites=True,
+        )
+        meeting_id = int(created.id) if created.id else None
+        assert meeting_id, f"Expected meeting id, got {created!r}"
+        try:
+            result = await update_meeting(meeting_id=meeting_id, title=new_title)
+            assert result.kind == "meeting"
+            fetched = await client.get_meeting(meeting_id)
+            assert fetched["id"] == meeting_id
+            assert fetched.get("title") == new_title
+        finally:
+            await client.delete(f"/meetings/{meeting_id}")
+
+    async def test_delete_note_removes_note(self, test_candidate):
+        payload = {
+            "description": _test_label("DeleteNote"),
+            "related_to": test_candidate,
+            "related_to_type": "candidate",
+        }
+        created = await client.create_note(payload)
+        note_id = created.get("id")
+        assert note_id, f"Expected id in create-note response, got {created!r}"
+        deleted = False
+        try:
+            await client.delete_note(note_id)
+            deleted = True
+            with pytest.raises(RecruitCrmError) as exc_info:
+                await client.get_note(note_id)
+            assert exc_info.value.status == 404
+        finally:
+            if not deleted:
+                # Belt-and-suspenders: if delete_note raised, ensure cleanup.
+                try:
+                    await client.delete(f"/notes/{note_id}")
+                except Exception:
+                    pass
+
+
+class TestCustomFieldsWrites:
+    """Round-trip tests for set_*_custom_fields tools.
+
+    Each test skips when the tenant has no custom fields of the relevant type,
+    since we can't round-trip a value without a live field_id.
+    """
+
+    @staticmethod
+    def _find_value(custom_fields: list[dict] | None, field_id: int) -> str | None:
+        """Pick the value for a specific field_id out of a custom_fields array."""
+        if not custom_fields:
+            return None
+        for cf in custom_fields:
+            if cf.get("field_id") == field_id:
+                return cf.get("value")
+        return None
+
+    async def test_set_company_custom_fields(self):
+        from recruit_crm_mcp.models import CustomFieldValue
+        from recruit_crm_mcp.server import set_company_custom_fields
+
+        fields = await client.list_company_custom_fields()
+        if not fields:
+            pytest.skip("Tenant has no company custom fields")
+        field_id = fields[0]["id"]
+
+        company = await client.create_company({"company_name": _test_label("CFCo")})
+        slug = company.get("slug")
+        assert slug, f"Expected slug, got {company!r}"
+        try:
+            test_value = _test_label("CFVal")
+            result = await set_company_custom_fields(
+                slug=slug,
+                fields=[CustomFieldValue(field_id=field_id, value=test_value)],
+            )
+            assert result.kind == "company"
+            fetched = await client.get_company(slug)
+            got = self._find_value(fetched.get("custom_fields"), field_id)
+            assert got == test_value, (
+                f"Expected custom field {field_id}={test_value!r}, got {got!r}"
+            )
+        finally:
+            await client.delete(f"/companies/{slug}")
+
+    async def test_set_contact_custom_fields(self):
+        from recruit_crm_mcp.models import CustomFieldValue
+        from recruit_crm_mcp.server import set_contact_custom_fields
+
+        fields = await client.list_contact_custom_fields()
+        if not fields:
+            pytest.skip("Tenant has no contact custom fields")
+        field_id = fields[0]["id"]
+
+        first_name = _test_label("CFContact")
+        contact = await client.create_contact({
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
+        })
+        slug = contact.get("slug")
+        assert slug, f"Expected slug, got {contact!r}"
+        try:
+            test_value = _test_label("CFVal")
+            result = await set_contact_custom_fields(
+                slug=slug,
+                fields=[CustomFieldValue(field_id=field_id, value=test_value)],
+            )
+            assert result.kind == "contact"
+            fetched = await client.get_contact(slug)
+            got = self._find_value(fetched.get("custom_fields"), field_id)
+            assert got == test_value, (
+                f"Expected custom field {field_id}={test_value!r}, got {got!r}"
+            )
+        finally:
+            await client.delete(f"/contacts/{slug}")
+
+    async def test_set_job_custom_fields(self):
+        from recruit_crm_mcp.models import CustomFieldValue
+        from recruit_crm_mcp.server import set_job_custom_fields
+
+        fields = await client.list_job_custom_fields()
+        if not fields:
+            pytest.skip("Tenant has no job custom fields")
+        field_id = fields[0]["id"]
+
+        # Job requires company + contact; build throwaway anchors.
+        company = await client.create_company({"company_name": _test_label("CFJobCo")})
+        company_slug = company.get("slug")
+        assert company_slug, f"Expected company slug, got {company!r}"
+        try:
+            contact = await client.create_contact({
+                "first_name": _test_label("CFJobContact"),
+                "last_name": "Fixture",
+                "company_slug": company_slug,
+            })
+            contact_slug = contact.get("slug")
+            assert contact_slug, f"Expected contact slug, got {contact!r}"
+            try:
+                job = await client.create_job({
+                    "name": _test_label("CFJob"),
+                    "company_slug": company_slug,
+                    "contact_slug": contact_slug,
+                    "number_of_openings": 1,
+                    "currency_id": 1,
+                    "enable_job_application_form": 0,
+                    "job_description_text": "CF job",
+                })
+                job_slug = job.get("slug")
+                assert job_slug, f"Expected job slug, got {job!r}"
+                try:
+                    test_value = _test_label("CFVal")
+                    result = await set_job_custom_fields(
+                        slug=job_slug,
+                        fields=[CustomFieldValue(field_id=field_id, value=test_value)],
+                    )
+                    assert result.kind == "job"
+                    fetched = await client.get_job(job_slug)
+                    got = self._find_value(fetched.get("custom_fields"), field_id)
+                    assert got == test_value, (
+                        f"Expected custom field {field_id}={test_value!r}, got {got!r}"
+                    )
+                finally:
+                    await client.delete(f"/jobs/{job_slug}")
+            finally:
+                await client.delete(f"/contacts/{contact_slug}")
+        finally:
+            await client.delete(f"/companies/{company_slug}")
+
+    async def test_set_candidate_custom_fields(self):
+        from recruit_crm_mcp.models import CustomFieldValue
+        from recruit_crm_mcp.server import set_candidate_custom_fields
+
+        fields = await client.list_candidate_custom_fields()
+        if not fields:
+            pytest.skip("Tenant has no candidate custom fields")
+        field_id = fields[0]["id"]
+
+        first_name = _test_label("CFCand")
+        candidate = await client.create_candidate({
+            "first_name": first_name,
+            "last_name": "Fixture",
+            "email": f"{first_name.lower()}@example.invalid",
+        })
+        slug = candidate.get("slug")
+        assert slug, f"Expected slug, got {candidate!r}"
+        try:
+            test_value = _test_label("CFVal")
+            result = await set_candidate_custom_fields(
+                slug=slug,
+                fields=[CustomFieldValue(field_id=field_id, value=test_value)],
+            )
+            assert result.kind == "candidate"
+            fetched = await client.get_candidate(slug)
+            got = self._find_value(fetched.get("custom_fields"), field_id)
+            assert got == test_value, (
+                f"Expected custom field {field_id}={test_value!r}, got {got!r}"
+            )
+        finally:
+            await client.delete(f"/candidates/{slug}")
+
+
+class TestAssignmentWrites:
+    """Integration tests for the assignment trio: assign / unassign / update_hiring_stage."""
+
+    async def test_assign_and_unassign_candidate(self, test_candidate):
+        # Build a throwaway company + contact + job to avoid polluting real records.
+        company = await client.create_company({"company_name": _test_label("AssignCo")})
+        company_slug = company.get("slug")
+        assert company_slug, f"Expected company slug, got {company!r}"
+        try:
+            contact = await client.create_contact({
+                "first_name": _test_label("AssignContact"),
+                "last_name": "Fixture",
+                "company_slug": company_slug,
+            })
+            contact_slug = contact.get("slug")
+            assert contact_slug, f"Expected contact slug, got {contact!r}"
+            try:
+                job = await client.create_job({
+                    "name": _test_label("AssignJob"),
+                    "company_slug": company_slug,
+                    "contact_slug": contact_slug,
+                    "number_of_openings": 1,
+                    "currency_id": 1,
+                    "enable_job_application_form": 0,
+                    "job_description_text": "Assign job",
+                })
+                job_slug = job.get("slug")
+                assert job_slug, f"Expected job slug, got {job!r}"
+                try:
+                    assign_resp = await client.assign_candidate(test_candidate, job_slug)
+                    # Response should echo our candidate slug.
+                    assert assign_resp.get("candidate_slug") == test_candidate
+                    unassigned = False
+                    try:
+                        # Confirm the assignment is visible on the job.
+                        assigned = await client.get_assigned_candidates(job_slug)
+                        assert any(
+                            (item.get("candidate") or {}).get("slug") == test_candidate
+                            for item in assigned
+                        ), f"Expected {test_candidate} in assigned list, got {assigned!r}"
+                    finally:
+                        await client.unassign_candidate(test_candidate, job_slug)
+                        unassigned = True
+                    assert unassigned
+                finally:
+                    await client.delete(f"/jobs/{job_slug}")
+            finally:
+                await client.delete(f"/contacts/{contact_slug}")
+        finally:
+            await client.delete(f"/companies/{company_slug}")
+
+    async def test_update_hiring_stage(self, test_candidate):
+        stages = await client.list_hiring_pipeline_stages(0)
+        if not stages:
+            pytest.skip("Tenant has no master hiring-pipeline stages")
+        status_id = stages[0]["id"]
+        if status_id is None:
+            pytest.skip("Master pipeline stage lacks an id")
+
+        company = await client.create_company({"company_name": _test_label("StageCo")})
+        company_slug = company.get("slug")
+        assert company_slug, f"Expected company slug, got {company!r}"
+        try:
+            contact = await client.create_contact({
+                "first_name": _test_label("StageContact"),
+                "last_name": "Fixture",
+                "company_slug": company_slug,
+            })
+            contact_slug = contact.get("slug")
+            assert contact_slug, f"Expected contact slug, got {contact!r}"
+            try:
+                job = await client.create_job({
+                    "name": _test_label("StageJob"),
+                    "company_slug": company_slug,
+                    "contact_slug": contact_slug,
+                    "number_of_openings": 1,
+                    "currency_id": 1,
+                    "enable_job_application_form": 0,
+                    "job_description_text": "Stage job",
+                })
+                job_slug = job.get("slug")
+                assert job_slug, f"Expected job slug, got {job!r}"
+                try:
+                    await client.assign_candidate(test_candidate, job_slug)
+                    try:
+                        resp = await client.update_hiring_stage(
+                            test_candidate, job_slug, {"status_id": status_id}
+                        )
+                        # Either the response echoes a candidate_slug or it silently
+                        # succeeds with an empty body — both are acceptable.
+                        echoed = resp.get("candidate_slug")
+                        assert echoed in (test_candidate, None), (
+                            f"Unexpected candidate_slug in response: {echoed!r}"
+                        )
+                    finally:
+                        await client.unassign_candidate(test_candidate, job_slug)
+                finally:
+                    await client.delete(f"/jobs/{job_slug}")
+            finally:
+                await client.delete(f"/contacts/{contact_slug}")
+        finally:
+            await client.delete(f"/companies/{company_slug}")
+
+
+class TestFileUploadWrites:
+    """Integration tests for file upload.
+
+    Recruit CRM has no public DELETE /files endpoint — the uploaded file will
+    leak by design. We anchor the upload to a throwaway candidate and delete
+    the candidate, which implicitly orphans the file. Folder names include a
+    timestamp suffix so reruns don't collide in the UI.
+    """
+
+    async def test_upload_file_url(self, test_candidate):
+        ts = _ts()
+        # Small public PNG — GNU GPLv3 badge is stable and light.
+        file_url = "https://www.gnu.org/graphics/gplv3-127x51.png"
+        folder = f"mcp-test-{ts}"
+        resp = await client.upload_file(
+            file_url=file_url,
+            related_to=test_candidate,
+            related_to_type="candidate",
+            folder=folder,
+        )
+        # Response should carry at least a file_link for the uploaded asset.
+        assert resp.get("file_link"), (
+            f"Expected file_link in upload response, got {resp!r}"
+        )

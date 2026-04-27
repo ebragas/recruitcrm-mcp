@@ -18,7 +18,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync
       - run: uv run ruff check src/ tests/
-      - run: uv run pytest -m "not integration"
+      - run: uv run pytest -m "not integration and not mcp_live"
 
   publish:
     needs: test

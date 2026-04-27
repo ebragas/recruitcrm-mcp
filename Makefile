@@ -1,4 +1,4 @@
-.PHONY: setup venv clean test coverage integration-test lint check fetch-docs
+.PHONY: setup venv clean test coverage integration-test integration-test-keep integration-sweep mcp-test mcp-live-test smoke lint check fetch-docs
 
 setup: venv
 	git config core.hooksPath .githooks
@@ -13,13 +13,28 @@ clean:
 	find . -type f -name '*.pyc' -delete
 
 test:
-	uv run pytest -m "not integration"
+	uv run pytest -m "not integration and not mcp_live"
 
 coverage:
-	uv run pytest -m "not integration" --cov=recruit_crm_mcp --cov-report=term-missing --cov-report=xml:coverage.xml
+	uv run pytest -m "not integration and not mcp_live" --cov=recruit_crm_mcp --cov-report=term-missing --cov-report=xml:coverage.xml
 
 integration-test:
 	uv run pytest -m integration --tb=short
+
+integration-test-keep:
+	RECRUIT_CRM_KEEP_ENTITIES=1 uv run pytest -m integration --tb=short -v -s
+
+integration-sweep:
+	uv run python -m tests.integration._sweep
+
+mcp-test:
+	uv run pytest tests/mcp -m "not mcp_live"
+
+mcp-live-test:
+	uv run pytest tests/mcp -m mcp_live --tb=short
+
+smoke:
+	uv run scripts/smoke.py
 
 lint:
 	uv run ruff check src/ tests/

@@ -5,20 +5,19 @@ from pydantic import ValidationError
 
 from recruit_crm_mcp.models import (
     AssignedCandidateSummary,
-    CandidateCreate,
+    Associations,
     CandidateSummary,
-    CompanyCreate,
     CompanySummary,
-    ContactCreate,
     ContactSummary,
+    CustomFieldValue,
+    EntityRef,
     JobSummary,
-    MeetingCreate,
+    LookupItem,
     MeetingSummary,
-    NoteCreate,
     NoteSummary,
-    TaskCreate,
     TaskSummary,
     UserSummary,
+    WriteResult,
 )
 
 
@@ -383,299 +382,110 @@ class TestAssignedCandidateSummary:
 # ---------------------------------------------------------------------------
 
 
-class TestNoteCreate:
-    def test_required_fields_only(self):
-        m = NoteCreate(
-            description="A note",
-            related_to="cand-123",
-            related_to_type="candidate",
-        )
-        assert m.description == "A note"
-        assert m.related_to == "cand-123"
-        assert m.related_to_type == "candidate"
+class TestEntityRef:
+    def test_accepts_all_kinds(self):
+        for kind in ("candidate", "company", "contact", "job", "deal"):
+            ref = EntityRef(kind=kind, id="some-id")
+            assert ref.kind == kind
+            assert ref.id == "some-id"
 
-    def test_all_fields(self):
-        m = NoteCreate(
-            description="A note",
-            related_to="cand-123",
-            related_to_type="candidate",
-            note_type_id=48622,
-            associated_candidate="cand-456",
-            associated_company="comp-789",
-            associated_contact="cont-012",
-            associated_job="job-345",
-            associated_deal="deal-678",
-            created_by=31585,
-        )
-        assert m.note_type_id == 48622
-        assert m.created_by == 31585
-
-    def test_missing_required_raises(self):
+    def test_rejects_invalid_kind(self):
         with pytest.raises(ValidationError):
-            NoteCreate(description="A note")
+            EntityRef(kind="bogus", id="some-id")
 
     def test_extra_field_rejected(self):
         with pytest.raises(ValidationError):
-            NoteCreate(
-                description="A note",
-                related_to="cand-123",
-                related_to_type="candidate",
-                bogus_field="nope",
-            )
+            EntityRef(kind="candidate", id="cand-123", bogus="nope")
 
-    def test_invalid_related_to_type_raises(self):
-        with pytest.raises(ValidationError):
-            NoteCreate(
-                description="A note",
-                related_to="cand-123",
-                related_to_type="bogus",
-            )
 
-    def test_model_dump_exclude_none(self):
-        m = NoteCreate(
-            description="A note",
-            related_to="cand-123",
-            related_to_type="candidate",
+class TestAssociations:
+    def test_defaults(self):
+        a = Associations()
+        assert a.candidates == []
+        assert a.companies == []
+        assert a.contacts == []
+        assert a.jobs == []
+        assert a.deals == []
+
+    def test_populated(self):
+        a = Associations(
+            candidates=["cand-1"],
+            companies=["comp-1"],
+            contacts=["cont-1"],
+            jobs=["job-1"],
+            deals=["deal-1"],
         )
-        d = m.model_dump(exclude_none=True)
-        assert d == {
-            "description": "A note",
-            "related_to": "cand-123",
-            "related_to_type": "candidate",
-        }
-
-
-class TestTaskCreate:
-    def test_required_fields_only(self):
-        m = TaskCreate(title="Follow up", reminder=-1, start_date="2025-04-29")
-        assert m.title == "Follow up"
-        assert m.reminder == -1
-        assert m.start_date == "2025-04-29"
-
-    def test_all_fields(self):
-        m = TaskCreate(
-            title="Follow up",
-            reminder=15,
-            start_date="2025-04-29",
-            description="Call Jane",
-            task_type_id=1,
-            related_to="cand-123",
-            related_to_type="candidate",
-            owner_id=31585,
-        )
-        assert m.task_type_id == 1
-        assert m.owner_id == 31585
-
-    def test_missing_required_raises(self):
-        with pytest.raises(ValidationError):
-            TaskCreate(title="Follow up")
+        assert a.candidates == ["cand-1"]
+        assert a.deals == ["deal-1"]
 
     def test_extra_field_rejected(self):
         with pytest.raises(ValidationError):
-            TaskCreate(
-                title="Follow up",
-                reminder=-1,
-                start_date="2025-04-29",
-                bogus_field="nope",
-            )
+            Associations(unknown=["x"])
 
-    def test_invalid_related_to_type_raises(self):
+
+class TestLookupItem:
+    def test_from_api_response_normal(self):
+        item = LookupItem.from_api_response({"id": 42, "label": "Call"})
+        assert item.id == 42
+        assert item.label == "Call"
+
+    def test_from_api_response_missing_label(self):
+        item = LookupItem.from_api_response({"id": 7})
+        assert item.id == 7
+        assert item.label == ""
+
+    def test_from_api_response_null_label(self):
+        item = LookupItem.from_api_response({"id": 7, "label": None})
+        assert item.id == 7
+        assert item.label == ""
+
+
+class TestWriteResult:
+    def test_valid_kind(self):
+        r = WriteResult(kind="note", id="63590686", title="A note")
+        assert r.kind == "note"
+        assert r.id == "63590686"
+        assert r.title == "A note"
+        assert r.url is None
+
+    def test_invalid_kind_rejected(self):
         with pytest.raises(ValidationError):
-            TaskCreate(
-                title="Follow up",
-                reminder=-1,
-                start_date="2025-04-29",
-                related_to="cand-123",
-                related_to_type="bogus",
-            )
+            WriteResult(kind="bogus", id="123")
 
-    def test_model_dump_exclude_none(self):
-        m = TaskCreate(title="Follow up", reminder=-1, start_date="2025-04-29")
-        d = m.model_dump(exclude_none=True)
-        assert d == {
-            "title": "Follow up",
-            "reminder": -1,
-            "start_date": "2025-04-29",
-        }
-
-
-class TestMeetingCreate:
-    def test_required_fields_only(self):
-        m = MeetingCreate(
-            title="Interview",
-            reminder=0,
-            start_date="2025-04-29T18:30:00",
-            end_date="2025-04-29T19:00:00",
+    def test_file_kind_accepted(self):
+        """``file`` is a valid WriteKind for upload_file results."""
+        r = WriteResult(
+            kind="file",
+            id="https://cdn/x.pdf",
+            title="x.pdf",
+            url="https://cdn/x.pdf",
         )
-        assert m.title == "Interview"
-        assert m.reminder == 0
-        assert m.start_date == "2025-04-29T18:30:00"
-        assert m.end_date == "2025-04-29T19:00:00"
+        assert r.kind == "file"
+        assert r.id == "https://cdn/x.pdf"
+        assert r.url == "https://cdn/x.pdf"
 
-    def test_all_fields(self):
-        m = MeetingCreate(
-            title="Interview",
-            reminder=15,
-            start_date="2025-04-29T18:30:00",
-            end_date="2025-04-29T19:00:00",
-            description="Phone screen",
-            meeting_type_id=40014,
-            address="Zoom",
-            related_to="cand-123",
-            related_to_type="candidate",
-            owner_id=31585,
-        )
-        assert m.meeting_type_id == 40014
-        assert m.address == "Zoom"
 
-    def test_missing_required_raises(self):
+class TestCustomFieldValue:
+    def test_required_fields(self):
+        cf = CustomFieldValue(field_id=1, value="Enterprise")
+        assert cf.field_id == 1
+        assert cf.value == "Enterprise"
+
+    def test_missing_field_id_raises(self):
         with pytest.raises(ValidationError):
-            MeetingCreate(title="Interview", reminder=0, start_date="2025-04-29")
+            CustomFieldValue(value="x")
+
+    def test_missing_value_raises(self):
+        with pytest.raises(ValidationError):
+            CustomFieldValue(field_id=1)
 
     def test_extra_field_rejected(self):
         with pytest.raises(ValidationError):
-            MeetingCreate(
-                title="Interview",
-                reminder=0,
-                start_date="2025-04-29T18:30:00",
-                end_date="2025-04-29T19:00:00",
-                bogus_field="nope",
-            )
+            CustomFieldValue(field_id=1, value="x", bogus="nope")
 
-    def test_invalid_related_to_type_raises(self):
-        with pytest.raises(ValidationError):
-            MeetingCreate(
-                title="Interview",
-                reminder=0,
-                start_date="2025-04-29T18:30:00",
-                end_date="2025-04-29T19:00:00",
-                related_to="cand-123",
-                related_to_type="bogus",
-            )
-
-    def test_model_dump_exclude_none(self):
-        m = MeetingCreate(
-            title="Interview",
-            reminder=0,
-            start_date="2025-04-29T18:30:00",
-            end_date="2025-04-29T19:00:00",
-        )
-        d = m.model_dump(exclude_none=True)
-        assert d == {
-            "title": "Interview",
-            "reminder": 0,
-            "start_date": "2025-04-29T18:30:00",
-            "end_date": "2025-04-29T19:00:00",
-        }
-
-
-class TestCandidateCreate:
-    def test_required_fields_only(self):
-        m = CandidateCreate(first_name="Jane")
-        assert m.first_name == "Jane"
-
-    def test_all_fields(self):
-        m = CandidateCreate(
-            first_name="Jane",
-            last_name="Doe",
-            email="jane@example.com",
-            position="Engineer",
-            contact_number="+1234567890",
-            city="Austin",
-            state="Texas",
-            country="US",
-            linkedin="https://linkedin.com/in/jane",
-            current_organization="Acme",
-            skill="Python",
-            source="LinkedIn",
-            candidate_summary="Experienced engineer",
-            owner_id=31585,
-        )
-        assert m.last_name == "Doe"
-        assert m.current_organization == "Acme"
-        assert m.owner_id == 31585
-
-    def test_missing_required_raises(self):
-        with pytest.raises(ValidationError):
-            CandidateCreate()
-
-    def test_extra_field_rejected(self):
-        with pytest.raises(ValidationError):
-            CandidateCreate(first_name="Jane", bogus_field="nope")
-
-    def test_model_dump_exclude_none(self):
-        m = CandidateCreate(first_name="Jane")
-        d = m.model_dump(exclude_none=True)
-        assert d == {"first_name": "Jane"}
-
-
-class TestContactCreate:
-    def test_required_fields_only(self):
-        m = ContactCreate(first_name="Jane", last_name="Doe")
-        assert m.first_name == "Jane"
-        assert m.last_name == "Doe"
-
-    def test_all_fields(self):
-        m = ContactCreate(
-            first_name="Jane",
-            last_name="Doe",
-            email="jane@example.com",
-            contact_number="+1234567890",
-            designation="VP Sales",
-            company_slug="acme-corp",
-            city="Austin",
-            state="Texas",
-            country="US",
-            linkedin="https://linkedin.com/in/jane",
-            stage_id=1,
-            owner_id=31585,
-        )
-        assert m.designation == "VP Sales"
-        assert m.stage_id == 1
-
-    def test_missing_required_raises(self):
-        with pytest.raises(ValidationError):
-            ContactCreate(first_name="Jane")
-
-    def test_extra_field_rejected(self):
-        with pytest.raises(ValidationError):
-            ContactCreate(first_name="Jane", last_name="Doe", bogus_field="nope")
-
-    def test_model_dump_exclude_none(self):
-        m = ContactCreate(first_name="Jane", last_name="Doe")
-        d = m.model_dump(exclude_none=True)
-        assert d == {"first_name": "Jane", "last_name": "Doe"}
-
-
-class TestCompanyCreate:
-    def test_required_fields_only(self):
-        m = CompanyCreate(company_name="Acme Corp")
-        assert m.company_name == "Acme Corp"
-
-    def test_all_fields(self):
-        m = CompanyCreate(
-            company_name="Acme Corp",
-            about_company="A great company",
-            website="https://acme.com",
-            industry_id=42,
-            city="Austin",
-            state="Texas",
-            country="US",
-            linkedin="https://linkedin.com/company/acme",
-            owner_id=31585,
-        )
-        assert m.industry_id == 42
-        assert m.owner_id == 31585
-
-    def test_missing_required_raises(self):
-        with pytest.raises(ValidationError):
-            CompanyCreate()
-
-    def test_extra_field_rejected(self):
-        with pytest.raises(ValidationError):
-            CompanyCreate(company_name="Acme", bogus_field="nope")
-
-    def test_model_dump_exclude_none(self):
-        m = CompanyCreate(company_name="Acme Corp")
-        d = m.model_dump(exclude_none=True)
-        assert d == {"company_name": "Acme Corp"}
+    def test_round_trip(self):
+        cf = CustomFieldValue(field_id=42, value="Hello")
+        d = cf.model_dump()
+        assert d == {"field_id": 42, "value": "Hello"}
+        cf2 = CustomFieldValue.model_validate(d)
+        assert cf2 == cf
