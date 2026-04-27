@@ -67,25 +67,35 @@ def _maybe_keep_entities(monkeypatch):
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def _orphan_sweep_session():
+def _orphan_sweep_session():
     """Session-end orphan sweep — backstop cleanup for any test whose own
     ``finally`` block didn't run (process kill, transient delete error,
     assertion mid-cleanup chain). Runs after the last integration test.
 
+    Sync wrapper around ``sweep_orphans()`` so it can be session-scoped
+    (async session-scoped fixtures collide with the function-scoped
+    ``anyio_backend`` fixture).
+
     Set ``RECRUIT_CRM_SKIP_SWEEP=1`` to disable for ad-hoc debugging where
     you want to inspect leftovers manually.
     """
+    import asyncio
+
     yield
     if os.environ.get("RECRUIT_CRM_SKIP_SWEEP"):
         logger.info("Orphan sweep skipped (RECRUIT_CRM_SKIP_SWEEP set)")
         return
-    client.init_client()
-    try:
-        counts = await sweep_orphans()
-        logger.info("Orphan sweep summary: %s", counts)
-        print(f"\n[integration sweep] {counts}")
-    finally:
-        await client.aclose_client()
+
+    async def _run() -> dict[str, int]:
+        client.init_client()
+        try:
+            return await sweep_orphans()
+        finally:
+            await client.aclose_client()
+
+    counts = asyncio.run(_run())
+    logger.info("Orphan sweep summary: %s", counts)
+    print(f"\n[integration sweep] {counts}")
 
 
 @pytest.fixture
