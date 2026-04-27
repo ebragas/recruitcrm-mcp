@@ -1,6 +1,174 @@
 # CHANGELOG
 
 
+## v0.16.0 (2026-04-27)
+
+### Bug Fixes
+
+- **ci**: Exclude mcp_live tests from Release workflow
+  ([#30](https://github.com/ebragas/recruitcrm-mcp/pull/30),
+  [`e6cf5d8`](https://github.com/ebragas/recruitcrm-mcp/commit/e6cf5d8dc0fe31769afd7e330e63666790e21763))
+
+Mirrors the exclusion already in ci.yml and publish-prerelease.yml. Without it, the post-merge
+  Release run on main fails because mcp_live tests require RECRUIT_CRM_API_KEY, which is not wired
+  into CI.
+
+Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+### Continuous Integration
+
+- Add manual pre-release publish workflow
+  ([`d3ae7eb`](https://github.com/ebragas/recruitcrm-mcp/commit/d3ae7eb1efd36f3ae32578ec14b4663a512ae499))
+
+workflow_dispatch trigger that lints, runs unit tests, validates the input version is a PEP 440
+  pre-release (aN/bN/rcN/.devN), pins it into pyproject.toml on the runner, builds, and publishes
+  via the existing pypi trusted-publisher environment. Concurrency-serialized against the stable
+  release workflow so the two can't race on PyPI.
+
+Cherry-picked from fe3b9fc on the write-tools-pr1/meeting-note-task-lookups feature branch —
+  separated into its own PR so the workflow becomes visible in the Actions UI before that feature
+  branch merges, enabling pre-release testing of the in-flight write-surface changes.
+
+### Features
+
+- Avery Knapp write surface + pre-release CI
+  ([#28](https://github.com/ebragas/recruitcrm-mcp/pull/28),
+  [`3351ff2`](https://github.com/ebragas/recruitcrm-mcp/commit/3351ff29481e98896e00ac3b3b0ddeb06dd01c3d))
+
+* feat: add write tools covering the full Avery Knapp transcript-to-CRM surface
+
+Ships 21 MCP write tools, 11 lookup tools, and the CI infrastructure to dogfood them via pre-release
+  PyPI publishes before cutting stable.
+
+Write tools: - log_meeting / update_meeting - create_note / delete_note - create_task / update_task
+  - create/update company, contact, job, candidate (inline custom_fields) -
+  set_{company,contact,job,candidate}_custom_fields wrappers - assign_candidate / unassign_candidate
+  / update_hiring_stage - upload_file (public URL via POST /v1/files multipart)
+
+Lookup tools for every ID the write surface depends on: note/meeting/ task types, hiring pipelines +
+  stages, contact stages, industries, and custom-field definitions for
+  company/contact/job/candidate.
+
+Scaffolding: EntityRef, Associations, LookupItem, WriteResult, and
+
+CustomFieldValue Pydantic models. RecruitCrmError surfaces structured 4xx/5xx bodies to tool
+  callers. _fetch_merge_post implements the "fetch -> merge -> POST" pattern the edit endpoints
+  need. _request now supports multipart via post_multipart. Server layer adds _build_payload
+  (None-strip + custom_fields serialization) and _write_result_from (title fallback for every entity
+  kind).
+
+CI: new .github/workflows/publish-prerelease.yml with manual
+
+workflow_dispatch, PEP 440 regex gate, runner-side pyproject.toml version pin. Reuses the existing
+  pypi trusted-publisher environment. Concurrency-grouped with the stable release workflow.
+
+Docs: README adds "Installing a pre-release (test) build" and an
+
+expanded Tools table. CLAUDE.md documents the maintainer-side pre-release flow and six new
+  field-mapping gotchas for the write endpoints (inline custom_fields, 7-field job create,
+  query-param assign/unassign, hiring-stage plural path, /files multipart, contact multi-company
+  comma-separated company_slug).
+
+Tests: 254 -> 320 unit tests. 13 new integration round-trips with
+
+strict try/finally cleanup via DELETE endpoints (TestWriteSurface, TestCustomFieldsWrites,
+  TestAssignmentWrites, TestFileUploadWrites).
+
+* fix: harden write tools + add MCP-layer tests before Windows deploy
+
+Closes the ship-blockers flagged in the multi-agent review and builds the missing test layer that
+  exercises FastMCP dispatch end-to-end, so the Windows install call doesn't surface these on first
+  real use.
+
+- Partial POST replaces broken _fetch_merge_post across 6 update_* funcs (read shape diverges from
+  write shape -> 422 on every associated_* field) - do_not_send_calendar_invites coerced to "1"/"0"
+  (API rejects JSON false) - list_hiring_pipeline_stages reads status_id not docs' stage_id - 17
+  write tools surface RecruitCrmError.body via fastmcp.ToolError - update_task gains task_type_id;
+  mutable defaults, dead code, empty-id path, _fetch_merge_post, unused Pydantic models all cleaned
+  up - tests/mcp/ harness + 33 MCP-layer tests + expanded integration coverage (related_to_type
+  variants, rejection guards, attendee round-trip) - make mcp-test, mcp-live-test, smoke;
+  scripts/smoke.py via UvxStdioTransport - WINDOWS_PREDEPLOY.md checklist for clean-VM verification
+  - CLAUDE.md gotchas document every live-API discovery
+
+346 non-live + 15 integration + 5 live-MCP tests green.
+
+* fix: address Copilot PR review comments
+
+- _build_payload: let custom_fields=[] serialize (was treated same as None, blocking callers from
+  intentionally clearing all custom-field values) - Associations: Field(default_factory=list) on all
+  5 list fields (Pydantic idiom + static-analysis-friendly; Pydantic v2 already deep-copied but this
+  matches house style) - _request: raise ValueError when both data and files passed instead of
+  silently dropping data (misuse fails loudly) - test _ts(): microsecond precision to avoid
+  collision under retry/concurrent runs within the same second
+
+Adds 4 unit tests pinning the new semantics.
+
+* fix: address Copilot round 2 review comments
+
+- update_task: remove status param (silently ignored by API; was misleading MCP clients per
+  CLAUDE.md gotcha) - 5 update_* docstrings: replace stale "GET+merge+POST" with accurate "partial
+  POST" wording (CLAUDE.md explicitly discourages fetch-merge) - update_task docstring: same
+  correction; mention status is read-only - scripts/smoke.py: handle both wrapped {"result": [...]}
+  and direct list shapes from structured_content (FastMCP varies by tool return type) -
+  publish-prerelease workflow: exclude mcp_live tests from CI (no live API key in CI environment;
+  would fail unintended live writes) - test_calendar_invites docstring: clarify it tests raw client
+  payloads, not the server tools (which now serialize bools to strings) - Update unit + MCP-layer
+  tests to match new update_task signature
+
+* fix: exclude mcp_live tests from CI + type job_location_type as string Literal
+
+CI was running the live MCP-layer tests because `pytest -m "not integration"` doesn't exclude the
+  `mcp_live` marker, causing 4 errors + 1 failure on every PR run when RECRUIT_CRM_API_KEY isn't
+  available. Mirror the selector already used in publish-prerelease.yml: `not integration and not
+  mcp_live`.
+
+Also retype `job_location_type` on `create_job`/`update_job` to `Literal["0", "1", "2"] | None` so
+  the MCP tool surface matches the API's documented string codes (per CLAUDE.md and the
+  find-job-by-slug.md example), instead of forwarding an int verbatim. Update the create_job unit
+  test to assert the string code in the outgoing payload.
+
+* test(integration): add orphan sweep + canonical MCP-Test- prefix
+
+Standardize every integration-test entity name to the canonical ``MCP-Test-<descriptor>-<uuid8>``
+  format via a single ``_test_label()`` helper, and add a session-scope autouse sweep that searches
+  each entity type for the prefix and deletes any leftovers at the end of every integration run.
+
+The sweep is a backstop for orphans from crashed teardowns (process kill, transient delete error,
+  assertion mid-cleanup chain) — every test still cleans up via try/finally first. It runs at
+  session end (not start) to avoid clobbering in-progress entities from a concurrent run on the same
+  tenant; a standalone ``make integration-sweep`` target covers ad-hoc pre-run cleanup.
+
+Bypass: ``RECRUIT_CRM_SKIP_SWEEP=1 make integration-test`` for debugging
+
+where you want to inspect leftovers manually.
+
+* test(integration): add RECRUIT_CRM_KEEP_ENTITIES step-through mode
+
+When set, monkey-patches client.delete and client.delete_note to no-op so test entities persist in
+  the tenant for UI verification. Also implies SKIP_SWEEP so the session sweep doesn't delete what
+  you wanted to inspect.
+
+Workflow: uv run pytest -m integration --collect-only -q RECRUIT_CRM_KEEP_ENTITIES=1 uv run pytest
+  <node_id> -v -s # verify in Recruit CRM UI make integration-sweep
+
+Adds make integration-test-keep target as a shortcut.
+
+* fix(integration): sync-wrap session sweep + log walkthrough findings
+
+The session-scope async _orphan_sweep_session fixture errored with ScopeMismatch because
+  anyio_backend is function-scoped (in tests/conftest.py). Sync-wrap the sweep with asyncio.run so
+  it can stay session-scoped.
+
+Also seed TODO.md with the issues surfaced during the test #1-#7 walkthrough on the live tenant:
+  about_company create-path bug, read-after-write race in update round-trips, designation/Title
+  naming mismatch, sweep needing per-entity confirmation, and tenant UI not surfacing several
+  persisted fields.
+
+---------
+
+Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+
 ## v0.15.0 (2026-04-02)
 
 ### Bug Fixes
@@ -10,6 +178,11 @@
 
 The parameter was named job_id but passed as job_slug to the client, which was misleading. Renamed
   to match the client API and underlying endpoint path (/jobs/{job_slug}/assigned-candidates).
+
+### Chores
+
+- **release**: 0.15.0
+  ([`f2513bd`](https://github.com/ebragas/recruitcrm-mcp/commit/f2513bd2c6540b56d524db3792d1ddfd5c19a5f6))
 
 ### Testing
 
