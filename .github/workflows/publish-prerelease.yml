@@ -1,0 +1,77 @@
+name: Publish pre-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Pre-release version (e.g. 0.16.0rc1, 0.16.0a1, 0.16.0.dev1). Must be a PEP 440 pre-release — plain releases are rejected."
+        required: true
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run ruff check src/ tests/
+      - run: uv run pytest -m "not integration"
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    # Serialize against the stable-release workflow so the two can't race on PyPI.
+    concurrency: release
+    permissions:
+      id-token: write
+      contents: read
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate pre-release version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'EOF'
+          import os, re, sys
+          v = os.environ["VERSION"]
+          if not re.match(r"^\d+\.\d+\.\d+((a|b|rc)\d+|\.dev\d+)$", v):
+              print(
+                  f"Refusing to publish {v!r} — not a PEP 440 pre-release "
+                  "(accepted suffixes: aN, bN, rcN, .devN).",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          print(f"validated {v} as PEP 440 pre-release")
+          EOF
+
+      - name: Pin version in pyproject.toml
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'EOF'
+          import os, pathlib, re
+          v = os.environ["VERSION"]
+          p = pathlib.Path("pyproject.toml")
+          s = p.read_text()
+          s, n = re.subn(r'(?m)^version\s*=.*$', f'version = "{v}"', s, count=1)
+          if n != 1:
+              raise SystemExit("pyproject.toml: could not find version line to rewrite")
+          p.write_text(s)
+          print(f"pinned pyproject.toml version = {v}")
+          EOF
+
+      - name: Build
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
