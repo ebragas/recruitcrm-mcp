@@ -112,6 +112,24 @@ class TestJobSummary:
         assert s.status is None
         assert s.job_location_type == ""
 
+    def test_coerces_numeric_salary_and_experience_fields(self):
+        s = JobSummary.from_api_response(
+            {
+                "minimum_experience": 0,
+                "maximum_experience": 5,
+                "min_annual_salary": 80000,
+                "max_annual_salary": 90000,
+                "pay_rate": 0,
+                "bill_rate": 0,
+            }
+        )
+        assert s.minimum_experience == "0"
+        assert s.maximum_experience == "5"
+        assert s.min_annual_salary == "80000"
+        assert s.max_annual_salary == "90000"
+        assert s.pay_rate == "0"
+        assert s.bill_rate == "0"
+
 
 class TestContactSummary:
     def test_from_api_response(self):
