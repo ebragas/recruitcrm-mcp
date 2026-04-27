@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.16.1 (2026-04-27)
+
+### Bug Fixes
+
+- Coerce JobSummary numeric fields from int to str
+  ([#31](https://github.com/ebragas/recruitcrm-mcp/pull/31),
+  [`ee9b005`](https://github.com/ebragas/recruitcrm-mcp/commit/ee9b005476aa2f097b9af0181a1526a47ecc18b1))
+
+The Recruit CRM API returns minimum_experience, maximum_experience, min_annual_salary,
+  max_annual_salary, pay_rate, and bill_rate as integers for some job records. JobSummary typed all
+  six as str | None, so Pydantic v2 raised ValidationError on every list_jobs / search_jobs response
+  containing such a record (e.g. Vandelay graphic designer: 80000 / 90000 / 0). The deployed MCP
+  failed end-to-end before any write tool could be invoked.
+
+Add coerce_numbers_to_str=True so Pydantic accepts both shapes from the API and stores them as
+  strings. Adds a regression unit test covering the int payload.
+
+Refs MAIN-790
+
+Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+
 ## v0.16.0 (2026-04-27)
 
 ### Bug Fixes
@@ -14,6 +36,11 @@ Mirrors the exclusion already in ci.yml and publish-prerelease.yml. Without it, 
   into CI.
 
 Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+### Chores
+
+- **release**: 0.16.0
+  ([`8b9fb80`](https://github.com/ebragas/recruitcrm-mcp/commit/8b9fb80a0c55de27b83b1dba18b3f4d440263b12))
 
 ### Continuous Integration
 
