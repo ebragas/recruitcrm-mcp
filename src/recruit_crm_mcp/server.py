@@ -1350,14 +1350,23 @@ _TRUNCATED_NOTE = (
 
 def _build_report_body(
     summary: str,
-    last_error: str | None,
+    last_error: str,
     additional_context: str,
+    last_error_truncated: bool = False,
 ) -> str:
+    """Render the issue body markdown.
+
+    ``last_error`` is the actual trace text to embed; pass ``""`` to omit the
+    section entirely (the user didn't supply one). Pass
+    ``last_error_truncated=True`` when the trace was provided but had to be
+    dropped to fit the URL — the body then renders the truncation note in
+    place of the code block.
+    """
     lines = [f"## Summary\n\n{summary}", ""]
-    if last_error is None:
-        lines.extend(["## Last error\n", _TRUNCATED_NOTE, ""])
-    elif last_error:
+    if last_error:
         lines.extend(["## Last error\n", "```", last_error, "```", ""])
+    elif last_error_truncated:
+        lines.extend(["## Last error\n", _TRUNCATED_NOTE, ""])
     if additional_context:
         lines.extend([f"## Additional context\n\n{additional_context}", ""])
     lines.extend(
@@ -1370,6 +1379,10 @@ def _build_report_body(
         ]
     )
     return "\n".join(lines)
+
+
+def _encoded_url_len(params: dict[str, str]) -> int:
+    return len(f"{_REPO_ISSUES_URL}?{urlencode(params)}")
 
 
 @mcp.tool()
@@ -1393,36 +1406,38 @@ async def report_issue(
     extra_part = (additional_context or "").strip()[:_REPORT_BODY_FIELD_MAX]
 
     title = summary.splitlines()[0][:120] if summary else "Bug report"
+    params = {"title": title, "labels": "user-report", "body": ""}
 
-    # Build progressively shorter bodies until the URL fits. Drop last_error
-    # first (largest, most likely to blow the budget), then additional_context,
-    # then start trimming summary itself. Last resort: emit a stub so the user
-    # at least gets an openable URL with a note to paste detail manually.
+    # Try progressively smaller bodies. Each candidate makes the user-vs-system
+    # distinction explicit — `last_error_truncated=True` only when the user
+    # provided a trace that we had to drop, so we never falsely claim "trace
+    # omitted" on a request that never had one.
     candidates: list[str] = [
-        _build_report_body(summary, last_error_part or None, extra_part),
+        _build_report_body(summary, last_error_part, extra_part),
     ]
-    if last_error_part:
-        candidates.append(_build_report_body(summary, None, extra_part))
     if extra_part:
-        candidates.append(_build_report_body(summary, None, ""))
+        candidates.append(_build_report_body(summary, last_error_part, ""))
+    if last_error_part:
+        candidates.append(
+            _build_report_body(summary, "", "", last_error_truncated=True)
+        )
+    candidates.append(_build_report_body(summary, "", ""))
 
-    body = candidates[0]
-    params = {"title": title, "body": body, "labels": "user-report"}
     for body in candidates:
         params["body"] = body
-        if len(f"{_REPO_ISSUES_URL}?{urlencode(params)}") <= _REPORT_URL_MAX:
+        if _encoded_url_len(params) <= _REPORT_URL_MAX:
             break
     else:
-        # Even the no-trace, no-extra body overflows — summary is huge. Trim it
-        # to whatever still fits with the env block intact.
-        stub_overhead = len(f"{_REPO_ISSUES_URL}?{urlencode({**params, 'body': ''})}")
-        room = _REPORT_URL_MAX - stub_overhead
-        params["body"] = body[:room] + "\n\n" + _TRUNCATED_NOTE if room > 0 else body[:_REPORT_URL_MAX]
-
-    url = f"{_REPO_ISSUES_URL}?{urlencode(params)}"
+        # Even the bare-summary body overflows — summary itself is enormous.
+        # Trim by encoded URL length (chunked to avoid n^2 encoding cost) until
+        # it fits, since URL-encoding can expand bytes unpredictably.
+        body = candidates[-1]
+        while body and _encoded_url_len({**params, "body": body}) > _REPORT_URL_MAX:
+            body = body[:-128]
+        params["body"] = body
 
     return {
-        "url": url,
+        "url": f"{_REPO_ISSUES_URL}?{urlencode(params)}",
         "title": title,
         "instruction": (
             "Open the URL in a browser to file the issue. The form is "

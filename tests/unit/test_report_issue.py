@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from recruit_crm_mcp.server import report_issue
+from recruit_crm_mcp.server import _REPORT_SUMMARY_MAX, report_issue
 
 
 @pytest.mark.anyio
@@ -72,6 +72,44 @@ async def test_url_stays_under_limit_with_huge_summary_and_extra():
         huge_summary, last_error="err", additional_context=huge_extra
     )
     assert len(result["url"]) <= 7000 + 200
+
+
+@pytest.mark.anyio
+async def test_no_truncation_note_when_no_last_error_provided():
+    """When the user didn't supply a trace, the body must never claim one was
+    dropped — even when other fields force the iterative shrink path."""
+    huge_summary = "Y" * 20_000
+    huge_extra = "Z" * 5_000
+    result = await report_issue(
+        huge_summary, last_error=None, additional_context=huge_extra
+    )
+    qs = parse_qs(urlparse(result["url"]).query)
+    assert "Trace omitted" not in qs["body"][0]
+
+
+@pytest.mark.anyio
+async def test_no_truncation_note_when_last_error_blank():
+    huge_summary = "Y" * 20_000
+    result = await report_issue(huge_summary, last_error="", additional_context="")
+    qs = parse_qs(urlparse(result["url"]).query)
+    assert "Trace omitted" not in qs["body"][0]
+
+
+@pytest.mark.anyio
+async def test_truncation_note_appears_when_trace_was_dropped():
+    """Force the candidate path that drops a provided trace by maxing every
+    field. URL must still fit, and either the trace appears OR the note does."""
+    result = await report_issue(
+        summary="X" * _REPORT_SUMMARY_MAX,
+        last_error="Y" * 2000,
+        additional_context="Z" * 2000,
+    )
+    body = parse_qs(urlparse(result["url"]).query)["body"][0]
+    assert len(result["url"]) <= 7000 + 200
+    trace_chunk = "Y" * 100
+    assert (trace_chunk in body) or ("Trace omitted" in body)
+    # Mutually exclusive: never both
+    assert not (trace_chunk in body and "Trace omitted" in body)
 
 
 @pytest.mark.anyio
