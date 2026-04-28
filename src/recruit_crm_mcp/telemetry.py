@@ -31,6 +31,7 @@ def init_telemetry() -> bool:
         return False
 
     import sentry_sdk
+    from sentry_sdk.integrations.logging import LoggingIntegration
     from sentry_sdk.integrations.mcp import MCPIntegration
 
     sentry_sdk.init(
@@ -43,7 +44,14 @@ def init_telemetry() -> bool:
         traces_sample_rate=float(
             os.getenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE", "0.0")
         ),
-        integrations=[MCPIntegration(include_prompts=True)],
+        integrations=[
+            MCPIntegration(include_prompts=True),
+            # FastMCP logs every tool exception at error level before re-raising
+            # as ToolError; Sentry's default LoggingIntegration would then file
+            # a duplicate event for the same trace. Keep breadcrumbs, suppress
+            # log-derived events — MCPIntegration captures the actual exception.
+            LoggingIntegration(event_level=None),
+        ],
     )
     logger.info("Sentry initialized for recruit-crm-mcp@%s", __version__)
     return True
