@@ -2,14 +2,16 @@
 
 import logging
 import os
+import platform
+import sys
 from contextlib import asynccontextmanager
-from importlib.metadata import version, PackageNotFoundError
 from typing import Literal
+from urllib.parse import urlencode
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from recruit_crm_mcp import client
+from recruit_crm_mcp import __version__, client
 from recruit_crm_mcp.client import RecruitCrmError
 from recruit_crm_mcp.models import (
     AssignedCandidateSummary,
@@ -27,13 +29,13 @@ from recruit_crm_mcp.models import (
     UserSummary,
     WriteResult,
 )
+from recruit_crm_mcp.telemetry import init_telemetry
 
 logger = logging.getLogger(__name__)
 
-try:
-    __version__ = version("recruit-crm-mcp")
-except PackageNotFoundError:
-    __version__ = "0.0.0-dev"
+# Initialize Sentry before FastMCP so MCPIntegration can hook tool dispatch.
+# No-op unless RECRUIT_CRM_MCP_SENTRY_DSN (or SENTRY_DSN) is set.
+init_telemetry()
 
 
 @asynccontextmanager
@@ -1329,6 +1331,84 @@ async def upload_file(
         title=response.get("file_name"),
         url=response.get("file_link"),
     )
+
+
+# ---------------------------------------------------------------------------
+# User feedback
+# ---------------------------------------------------------------------------
+
+
+_REPO_ISSUES_URL = "https://github.com/ebragas/recruitcrm-mcp/issues/new"
+_REPORT_BODY_FIELD_MAX = 2000  # per-field cap before assembly
+_REPORT_URL_MAX = 7000  # GitHub practical URL length ceiling
+
+
+@mcp.tool()
+async def report_issue(
+    summary: str,
+    last_error: str | None = None,
+    additional_context: str | None = None,
+) -> dict:
+    """Build a prefilled GitHub issue URL the user can click to report a bug.
+
+    Use when the user wants to flag unexpected behavior in this MCP server
+    (not a Recruit CRM data issue). Returns a URL that opens the public
+    repo's new-issue form pre-populated with the summary, last error, and
+    environment details — the user clicks it and submits in their browser.
+
+    Pass any recent exception text via ``last_error`` so the report includes
+    triage detail. Long inputs are truncated to fit GitHub's URL length limit.
+    """
+    last_error_part = (last_error or "").strip()[:_REPORT_BODY_FIELD_MAX]
+    extra_part = (additional_context or "").strip()[:_REPORT_BODY_FIELD_MAX]
+
+    body_lines = [f"## Summary\n\n{summary.strip()}", ""]
+    if last_error_part:
+        body_lines.extend(["## Last error\n", "```", last_error_part, "```", ""])
+    if extra_part:
+        body_lines.extend([f"## Additional context\n\n{extra_part}", ""])
+    body_lines.extend(
+        [
+            "## Environment\n",
+            f"- recruit-crm-mcp: {__version__}",
+            f"- Python: {platform.python_version()}",
+            f"- OS: {platform.platform()}",
+            f"- Sys platform: {sys.platform}",
+        ]
+    )
+    body = "\n".join(body_lines)
+
+    title = summary.strip().splitlines()[0][:120] if summary.strip() else "Bug report"
+    params = {"title": title, "body": body, "labels": "user-report"}
+    url = f"{_REPO_ISSUES_URL}?{urlencode(params)}"
+
+    if len(url) > _REPORT_URL_MAX and last_error_part:
+        body_lines = [f"## Summary\n\n{summary.strip()}", ""]
+        if extra_part:
+            body_lines.extend([f"## Additional context\n\n{extra_part}", ""])
+        body_lines.extend(
+            [
+                "## Last error\n",
+                "_(Trace omitted — exceeded URL length limit. Paste it into the issue manually.)_",
+                "",
+                "## Environment\n",
+                f"- recruit-crm-mcp: {__version__}",
+                f"- Python: {platform.python_version()}",
+                f"- OS: {platform.platform()}",
+                f"- Sys platform: {sys.platform}",
+            ]
+        )
+        params["body"] = "\n".join(body_lines)
+        url = f"{_REPO_ISSUES_URL}?{urlencode(params)}"
+
+    return {
+        "url": url,
+        "title": title,
+        "instruction": (
+            "Open the URL in a browser to file the issue. The form is "
+            "prefilled — review and submit."
+        ),
+    }
 
 
 @mcp.resource("recruitcrm://candidate/{candidate_id}/resume")

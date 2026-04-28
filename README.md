@@ -218,6 +218,12 @@ make check           # run lint + tests
 | `list_job_custom_fields` | Custom-field definitions for jobs |
 | `list_candidate_custom_fields` | Custom-field definitions for candidates |
 
+### Feedback
+
+| Tool | Description |
+|------|-------------|
+| `report_issue` | Build a prefilled GitHub Issues URL the user can click to file a bug report |
+
 ## Resources
 
 | Resource | Description |
@@ -227,4 +233,50 @@ make check           # run lint + tests
 
 ## Configuration
 
-Set the `RECRUIT_CRM_API_KEY` environment variable with your Recruit CRM API token.
+Set environment variables in your MCP client config (e.g. `claude_desktop_config.json`'s `env` block):
+
+| Var | Required | Default | Description |
+|---|---|---|---|
+| `RECRUIT_CRM_API_KEY` | yes | — | Recruit CRM API token. |
+| `RECRUIT_CRM_MCP_SENTRY_DSN` | no | unset | Your own Sentry project DSN. If set, tool-call exceptions are auto-reported to that project. See [Error reporting](#error-reporting) below. |
+| `SENTRY_DSN` | no | unset | Fallback DSN if you already export it globally. `RECRUIT_CRM_MCP_SENTRY_DSN` takes precedence. |
+| `RECRUIT_CRM_MCP_ENV` | no | `production` | Sentry environment tag. |
+| `RECRUIT_CRM_MCP_SENTRY_TRACES_RATE` | no | `0.0` | Sentry trace sample rate (0.0–1.0). |
+
+## Error reporting
+
+Two complementary, fully optional channels for surfacing problems:
+
+### 1. `report_issue` MCP tool (always available)
+
+When something goes wrong and you want to send a structured bug report, ask Claude to "report this issue" or "file a bug." The MCP exposes a `report_issue` tool that builds a prefilled GitHub Issues URL — Claude returns the link, you click it, GitHub opens the new-issue form pre-populated with the summary, the last error, and your environment details. Submit it from your browser like any other issue. Works with any GitHub account; no token in the MCP, no collaborator access needed, repo is public.
+
+### 2. Sentry auto-capture (bring-your-own-DSN)
+
+If you want passive observability — every tool-call exception captured automatically with stack trace, span context, and HTTP breadcrumbs — set `RECRUIT_CRM_MCP_SENTRY_DSN` to a Sentry project DSN that you control. With no DSN set (the default), the MCP makes zero network calls to Sentry.
+
+This is **strictly bring-your-own-DSN**. We do not publish or embed a project DSN. If you want this, sign up for a free Sentry account, create a Python project, copy its DSN, and put it in your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "recruit-crm": {
+      "command": "uvx",
+      "args": ["recruit-crm-mcp"],
+      "env": {
+        "RECRUIT_CRM_API_KEY": "...",
+        "RECRUIT_CRM_MCP_SENTRY_DSN": "https://<key>@<org>.ingest.sentry.io/<project>"
+      }
+    }
+  }
+}
+```
+
+When enabled, the following ends up in *your* Sentry project: tool name, exception type and stack trace, tool arguments and return values (via `MCPIntegration(include_prompts=True)`), HTTPX breadcrumbs (URLs and status codes), MCP request/session IDs, and the package version. Recruit CRM data flowing through tools (candidate names, emails, company info) will appear in event payloads — that is the point, since most exceptions are unhelpful without the data that triggered them. Because the DSN is yours, the data only goes to your Sentry project.
+
+## Privacy
+
+- **No telemetry by default.** With no Sentry DSN configured, the MCP makes zero network calls to anyone except `api.recruitcrm.io`.
+- **No DSN is bundled.** We do not embed our own Sentry DSN — Sentry capture only works if you supply your own.
+- **`report_issue` is explicit-consent.** It only builds a clickable URL; nothing is sent until you submit the prefilled form in your browser.
+- **Public repo issues.** Reports filed via `report_issue` are publicly visible on GitHub. Don't paste secrets or PII you wouldn't want public.
