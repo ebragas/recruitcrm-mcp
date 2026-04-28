@@ -11,7 +11,13 @@ from datetime import datetime, timezone
 from getpass import getpass
 from pathlib import Path
 
-MCP_SERVER_ARGS = ["recruit-crm-mcp"]
+# `--refresh-package recruit-crm-mcp` forces uv to re-fetch the package's PyPI
+# simple-index entry on each Claude Desktop launch. Without this, uvx caches an
+# installed venv per tool name and reuses it indefinitely — meaning published
+# bug fixes don't reach users until they manually run `uvx --refresh ...`. The
+# cost is one HTTP request to PyPI per launch (~100ms warm); net win for any
+# user running an MCP that's still under active development.
+MCP_SERVER_ARGS = ["--refresh-package", "recruit-crm-mcp", "recruit-crm-mcp"]
 
 
 def _find_msix_config_path() -> Path | None:

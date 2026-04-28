@@ -39,11 +39,21 @@ class TestInjectServer:
             "mcpServers": {
                 "recruit-crm": {
                     "command": UVX_PATH,
-                    "args": ["recruit-crm-mcp"],
+                    "args": ["--refresh-package", "recruit-crm-mcp", "recruit-crm-mcp"],
                     "env": {"RECRUIT_CRM_API_KEY": "test-key-123"},
                 }
             }
         }
+
+    def test_args_include_refresh_package_flag(self):
+        """Auto-update guarantee: every install gets --refresh-package so users
+        pick up new releases on the next Claude Desktop launch without manual
+        cache invalidation."""
+        config = inject_server({}, "k", UVX_PATH)
+        args = config["mcpServers"]["recruit-crm"]["args"]
+        assert args[0] == "--refresh-package"
+        assert args[1] == "recruit-crm-mcp"
+        assert args[-1] == "recruit-crm-mcp"  # tool name is always the last arg
 
     def test_uses_absolute_uvx_path(self):
         config = inject_server({}, "key", "/home/user/.local/bin/uvx")

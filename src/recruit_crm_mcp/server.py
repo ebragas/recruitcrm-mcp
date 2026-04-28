@@ -2,14 +2,16 @@
 
 import logging
 import os
+import platform
+import sys
 from contextlib import asynccontextmanager
-from importlib.metadata import version, PackageNotFoundError
 from typing import Literal
+from urllib.parse import urlencode
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from recruit_crm_mcp import client
+from recruit_crm_mcp import __version__, client
 from recruit_crm_mcp.client import RecruitCrmError
 from recruit_crm_mcp.models import (
     AssignedCandidateSummary,
@@ -27,13 +29,13 @@ from recruit_crm_mcp.models import (
     UserSummary,
     WriteResult,
 )
+from recruit_crm_mcp.telemetry import init_telemetry
 
 logger = logging.getLogger(__name__)
 
-try:
-    __version__ = version("recruit-crm-mcp")
-except PackageNotFoundError:
-    __version__ = "0.0.0-dev"
+# Initialize Sentry before FastMCP so MCPIntegration can hook tool dispatch.
+# No-op unless RECRUIT_CRM_MCP_SENTRY_DSN (or SENTRY_DSN) is set.
+init_telemetry()
 
 
 @asynccontextmanager
@@ -1329,6 +1331,119 @@ async def upload_file(
         title=response.get("file_name"),
         url=response.get("file_link"),
     )
+
+
+# ---------------------------------------------------------------------------
+# User feedback
+# ---------------------------------------------------------------------------
+
+
+_REPO_ISSUES_URL = "https://github.com/ebragas/recruitcrm-mcp/issues/new"
+_REPORT_SUMMARY_MAX = 4000  # per-field cap; summary can be larger than the others
+_REPORT_BODY_FIELD_MAX = 2000  # per-field cap for last_error / additional_context
+_REPORT_URL_MAX = 7000  # GitHub practical URL length ceiling
+_TRUNCATED_NOTE = (
+    "_(Trace omitted — exceeded URL length limit. "
+    "Paste it into the issue manually.)_"
+)
+
+
+def _build_report_body(
+    summary: str,
+    last_error: str,
+    additional_context: str,
+    last_error_truncated: bool = False,
+) -> str:
+    """Render the issue body markdown.
+
+    ``last_error`` is the actual trace text to embed; pass ``""`` to omit the
+    section entirely (the user didn't supply one). Pass
+    ``last_error_truncated=True`` when the trace was provided but had to be
+    dropped to fit the URL — the body then renders the truncation note in
+    place of the code block.
+    """
+    lines = [f"## Summary\n\n{summary}", ""]
+    if last_error:
+        lines.extend(["## Last error\n", "```", last_error, "```", ""])
+    elif last_error_truncated:
+        lines.extend(["## Last error\n", _TRUNCATED_NOTE, ""])
+    if additional_context:
+        lines.extend([f"## Additional context\n\n{additional_context}", ""])
+    lines.extend(
+        [
+            "## Environment\n",
+            f"- recruit-crm-mcp: {__version__}",
+            f"- Python: {platform.python_version()}",
+            f"- OS: {platform.platform()}",
+            f"- Sys platform: {sys.platform}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _encoded_url_len(params: dict[str, str]) -> int:
+    return len(f"{_REPO_ISSUES_URL}?{urlencode(params)}")
+
+
+@mcp.tool()
+async def report_issue(
+    summary: str,
+    last_error: str | None = None,
+    additional_context: str | None = None,
+) -> dict:
+    """Build a prefilled GitHub issue URL the user can click to report a bug.
+
+    Use when the user wants to flag unexpected behavior in this MCP server
+    (not a Recruit CRM data issue). Returns a URL that opens the public
+    repo's new-issue form pre-populated with the summary, last error, and
+    environment details — the user clicks it and submits in their browser.
+
+    Pass any recent exception text via ``last_error`` so the report includes
+    triage detail. Long inputs are truncated to fit GitHub's URL length limit.
+    """
+    summary = (summary or "").strip()[:_REPORT_SUMMARY_MAX]
+    last_error_part = (last_error or "").strip()[:_REPORT_BODY_FIELD_MAX]
+    extra_part = (additional_context or "").strip()[:_REPORT_BODY_FIELD_MAX]
+
+    title = summary.splitlines()[0][:120] if summary else "Bug report"
+    params = {"title": title, "labels": "user-report", "body": ""}
+
+    # Try progressively smaller bodies. Each candidate makes the user-vs-system
+    # distinction explicit — `last_error_truncated=True` only when the user
+    # provided a trace that we had to drop, so we never falsely claim "trace
+    # omitted" on a request that never had one.
+    candidates: list[str] = [
+        _build_report_body(summary, last_error_part, extra_part),
+    ]
+    if extra_part:
+        candidates.append(_build_report_body(summary, last_error_part, ""))
+    if last_error_part:
+        candidates.append(
+            _build_report_body(summary, "", "", last_error_truncated=True)
+        )
+    candidates.append(_build_report_body(summary, "", ""))
+
+    for body in candidates:
+        params["body"] = body
+        if _encoded_url_len(params) <= _REPORT_URL_MAX:
+            break
+    else:
+        # Even the bare-summary body overflows — summary itself is enormous.
+        # Trim by encoded URL length (chunked to avoid n^2 encoding cost) until
+        # it fits, since URL-encoding can expand bytes unpredictably.
+        body = candidates[-1]
+        while body and _encoded_url_len({**params, "body": body}) > _REPORT_URL_MAX:
+            body = body[:-128]
+        params["body"] = body
+
+    return {
+        "url": f"{_REPO_ISSUES_URL}?{urlencode(params)}",
+        "title": title,
+        "instruction": (
+            "Open the URL in a browser to file the issue. The form is "
+            "prefilled — review and submit."
+        ),
+    }
 
 
 @mcp.resource("recruitcrm://candidate/{candidate_id}/resume")
