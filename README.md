@@ -61,7 +61,7 @@ If you prefer to configure manually, add to your `claude_desktop_config.json`:
   "mcpServers": {
     "recruit-crm": {
       "command": "uvx",
-      "args": ["recruit-crm-mcp"],
+      "args": ["--refresh-package", "recruit-crm-mcp", "recruit-crm-mcp"],
       "env": {
         "RECRUIT_CRM_API_KEY": "your-api-key-here"
       }
@@ -69,6 +69,8 @@ If you prefer to configure manually, add to your `claude_desktop_config.json`:
   }
 }
 ```
+
+> **Why `--refresh-package`?** Without it, `uvx` caches the installed venv and reuses it indefinitely — you'd stay on whichever version was installed first, even after we publish bug fixes. The flag forces `uvx` to re-fetch the package's PyPI index entry on each Claude Desktop launch (~100 ms warm) and pull a newer version when available. Auto-updates without you running anything.
 
 ### Installing a pre-release (test) build
 
@@ -102,9 +104,7 @@ and change the `args` entry to include the version pin:
 Fully quit and reopen Claude Desktop (the app keeps running in the dock
 after closing the window).
 
-**To roll back to stable**, set `args` back to `["recruit-crm-mcp"]` (or
-pin a specific stable like `["recruit-crm-mcp@0.15.0"]`) and restart
-Claude Desktop.
+**To roll back to stable**, set `args` back to `["--refresh-package", "recruit-crm-mcp", "recruit-crm-mcp"]` (or pin a specific stable like `["recruit-crm-mcp@0.15.0"]`) and restart Claude Desktop.
 
 > **Why other users are safe.** `uvx`'s default resolver strategy is
 > `--prerelease=if-necessary`: pre-releases are skipped unless no stable
@@ -262,7 +262,7 @@ This is **strictly bring-your-own-DSN**. We do not publish or embed a project DS
   "mcpServers": {
     "recruit-crm": {
       "command": "uvx",
-      "args": ["recruit-crm-mcp"],
+      "args": ["--refresh-package", "recruit-crm-mcp", "recruit-crm-mcp"],
       "env": {
         "RECRUIT_CRM_API_KEY": "...",
         "RECRUIT_CRM_MCP_SENTRY_DSN": "https://<key>@<org>.ingest.sentry.io/<project>"
