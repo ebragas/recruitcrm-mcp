@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.17.0 (2026-04-28)
+
+### Features
+
+- Optional Sentry capture and report_issue tool
+  ([#32](https://github.com/ebragas/recruitcrm-mcp/pull/32),
+  [`1f67bb1`](https://github.com/ebragas/recruitcrm-mcp/commit/1f67bb15a09d85319670da5884d5e8df829cf2c4))
+
+Adds two opt-in error reporting channels for end users of recruit-crm-mcp:
+
+* Sentry auto-capture (bring-your-own-DSN) — `init_telemetry()` runs at server import, no-ops unless
+  `RECRUIT_CRM_MCP_SENTRY_DSN` (or `SENTRY_DSN`) is set. Initializes Sentry's official
+  `MCPIntegration(include_prompts=True)` plus `LoggingIntegration(event_level=None)` so each tool
+  exception lands in the user's own Sentry project as a single event with full args, stack trace,
+  and HTTPX breadcrumbs. No DSN is published or embedded. * `report_issue` MCP tool — builds a
+  prefilled `github.com/ebragas/recruitcrm-mcp/issues/new` URL with summary, last error, and
+  environment info. Long inputs are progressively shrunk (drop additional_context → mark trace
+  truncated → trim summary) until the encoded URL fits under 7000 chars. * Installer/README now bake
+  `--refresh-package recruit-crm-mcp` into the `args` so end users auto-update on Claude Desktop
+  launch instead of staying stuck on the version that was installed first.
+
+End-to-end verified against magic-co Sentry org with `0.17.0rc3` — single event captured with
+  `release`, `environment`, tool name, args, and stack trace tags.
+
+Closes MAIN-791
+
+
 ## v0.16.1 (2026-04-27)
 
 ### Bug Fixes
@@ -21,6 +48,11 @@ Add coerce_numbers_to_str=True so Pydantic accepts both shapes from the API and 
 Refs MAIN-790
 
 Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+### Chores
+
+- **release**: 0.16.1
+  ([`c788924`](https://github.com/ebragas/recruitcrm-mcp/commit/c788924002a3d7d714d95ab833f6d5f26d3218ad))
 
 
 ## v0.16.0 (2026-04-27)
