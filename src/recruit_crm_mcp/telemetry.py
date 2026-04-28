@@ -24,6 +24,25 @@ from recruit_crm_mcp import __version__
 logger = logging.getLogger(__name__)
 
 
+def _parse_traces_rate(raw: str | None) -> float:
+    """Parse RECRUIT_CRM_MCP_SENTRY_TRACES_RATE, clamped to [0.0, 1.0].
+
+    init_telemetry runs at module import; a malformed env var must not crash
+    server startup. Falls back to 0.0 (tracing off) with a warning.
+    """
+    if raw is None or raw == "":
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning(
+            "RECRUIT_CRM_MCP_SENTRY_TRACES_RATE=%r is not a float; falling back to 0.0",
+            raw,
+        )
+        return 0.0
+    return max(0.0, min(1.0, value))
+
+
 def init_telemetry() -> bool:
     """Initialize Sentry if a DSN is configured. Returns True if initialized."""
     dsn = os.getenv("RECRUIT_CRM_MCP_SENTRY_DSN") or os.getenv("SENTRY_DSN")
@@ -41,8 +60,8 @@ def init_telemetry() -> bool:
         # Users opt in by providing their own DSN; their Sentry project, their
         # data. Send full context so errors are actually triageable.
         send_default_pii=True,
-        traces_sample_rate=float(
-            os.getenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE", "0.0")
+        traces_sample_rate=_parse_traces_rate(
+            os.getenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE")
         ),
         integrations=[
             MCPIntegration(include_prompts=True),

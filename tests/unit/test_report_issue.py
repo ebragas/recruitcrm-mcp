@@ -56,6 +56,25 @@ async def test_truncates_oversized_last_error():
 
 
 @pytest.mark.anyio
+async def test_url_stays_under_limit_with_huge_summary():
+    """A massive summary alone (no last_error) must not produce an unopenable URL.
+    Earlier the fallback branch only triggered when last_error was set."""
+    huge_summary = "Y" * 20_000
+    result = await report_issue(huge_summary)
+    assert len(result["url"]) <= 7000 + 200
+
+
+@pytest.mark.anyio
+async def test_url_stays_under_limit_with_huge_summary_and_extra():
+    huge_summary = "Y" * 20_000
+    huge_extra = "Z" * 5_000
+    result = await report_issue(
+        huge_summary, last_error="err", additional_context=huge_extra
+    )
+    assert len(result["url"]) <= 7000 + 200
+
+
+@pytest.mark.anyio
 async def test_title_falls_back_when_summary_blank():
     result = await report_issue("")
     qs = parse_qs(urlparse(result["url"]).query)

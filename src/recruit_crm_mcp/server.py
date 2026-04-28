@@ -1339,8 +1339,37 @@ async def upload_file(
 
 
 _REPO_ISSUES_URL = "https://github.com/ebragas/recruitcrm-mcp/issues/new"
-_REPORT_BODY_FIELD_MAX = 2000  # per-field cap before assembly
+_REPORT_SUMMARY_MAX = 4000  # per-field cap; summary can be larger than the others
+_REPORT_BODY_FIELD_MAX = 2000  # per-field cap for last_error / additional_context
 _REPORT_URL_MAX = 7000  # GitHub practical URL length ceiling
+_TRUNCATED_NOTE = (
+    "_(Trace omitted — exceeded URL length limit. "
+    "Paste it into the issue manually.)_"
+)
+
+
+def _build_report_body(
+    summary: str,
+    last_error: str | None,
+    additional_context: str,
+) -> str:
+    lines = [f"## Summary\n\n{summary}", ""]
+    if last_error is None:
+        lines.extend(["## Last error\n", _TRUNCATED_NOTE, ""])
+    elif last_error:
+        lines.extend(["## Last error\n", "```", last_error, "```", ""])
+    if additional_context:
+        lines.extend([f"## Additional context\n\n{additional_context}", ""])
+    lines.extend(
+        [
+            "## Environment\n",
+            f"- recruit-crm-mcp: {__version__}",
+            f"- Python: {platform.python_version()}",
+            f"- OS: {platform.platform()}",
+            f"- Sys platform: {sys.platform}",
+        ]
+    )
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -1359,47 +1388,38 @@ async def report_issue(
     Pass any recent exception text via ``last_error`` so the report includes
     triage detail. Long inputs are truncated to fit GitHub's URL length limit.
     """
+    summary = (summary or "").strip()[:_REPORT_SUMMARY_MAX]
     last_error_part = (last_error or "").strip()[:_REPORT_BODY_FIELD_MAX]
     extra_part = (additional_context or "").strip()[:_REPORT_BODY_FIELD_MAX]
 
-    body_lines = [f"## Summary\n\n{summary.strip()}", ""]
+    title = summary.splitlines()[0][:120] if summary else "Bug report"
+
+    # Build progressively shorter bodies until the URL fits. Drop last_error
+    # first (largest, most likely to blow the budget), then additional_context,
+    # then start trimming summary itself. Last resort: emit a stub so the user
+    # at least gets an openable URL with a note to paste detail manually.
+    candidates: list[str] = [
+        _build_report_body(summary, last_error_part or None, extra_part),
+    ]
     if last_error_part:
-        body_lines.extend(["## Last error\n", "```", last_error_part, "```", ""])
+        candidates.append(_build_report_body(summary, None, extra_part))
     if extra_part:
-        body_lines.extend([f"## Additional context\n\n{extra_part}", ""])
-    body_lines.extend(
-        [
-            "## Environment\n",
-            f"- recruit-crm-mcp: {__version__}",
-            f"- Python: {platform.python_version()}",
-            f"- OS: {platform.platform()}",
-            f"- Sys platform: {sys.platform}",
-        ]
-    )
-    body = "\n".join(body_lines)
+        candidates.append(_build_report_body(summary, None, ""))
 
-    title = summary.strip().splitlines()[0][:120] if summary.strip() else "Bug report"
+    body = candidates[0]
     params = {"title": title, "body": body, "labels": "user-report"}
-    url = f"{_REPO_ISSUES_URL}?{urlencode(params)}"
+    for body in candidates:
+        params["body"] = body
+        if len(f"{_REPO_ISSUES_URL}?{urlencode(params)}") <= _REPORT_URL_MAX:
+            break
+    else:
+        # Even the no-trace, no-extra body overflows — summary is huge. Trim it
+        # to whatever still fits with the env block intact.
+        stub_overhead = len(f"{_REPO_ISSUES_URL}?{urlencode({**params, 'body': ''})}")
+        room = _REPORT_URL_MAX - stub_overhead
+        params["body"] = body[:room] + "\n\n" + _TRUNCATED_NOTE if room > 0 else body[:_REPORT_URL_MAX]
 
-    if len(url) > _REPORT_URL_MAX and last_error_part:
-        body_lines = [f"## Summary\n\n{summary.strip()}", ""]
-        if extra_part:
-            body_lines.extend([f"## Additional context\n\n{extra_part}", ""])
-        body_lines.extend(
-            [
-                "## Last error\n",
-                "_(Trace omitted — exceeded URL length limit. Paste it into the issue manually.)_",
-                "",
-                "## Environment\n",
-                f"- recruit-crm-mcp: {__version__}",
-                f"- Python: {platform.python_version()}",
-                f"- OS: {platform.platform()}",
-                f"- Sys platform: {sys.platform}",
-            ]
-        )
-        params["body"] = "\n".join(body_lines)
-        url = f"{_REPO_ISSUES_URL}?{urlencode(params)}"
+    url = f"{_REPO_ISSUES_URL}?{urlencode(params)}"
 
     return {
         "url": url,
