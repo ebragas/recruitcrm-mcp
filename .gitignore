@@ -194,6 +194,9 @@ cython_debug/
 # Claude Code worktrees
 .claude/worktrees/
 
+# Claude Code project-scoped MCP config (per-developer, references local secrets)
+.mcp.json
+
 # Ruff stuff:
 .ruff_cache/
 
