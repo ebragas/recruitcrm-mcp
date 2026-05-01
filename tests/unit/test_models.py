@@ -184,8 +184,8 @@ class TestCompanySummary:
             "country": "United States",
             "linkedin": "https://linkedin.com/company/acme",
             "industry_id": 42,
-            "is_parent_company": 1,
-            "is_child_company": 0,
+            "is_parent_company": "Yes",
+            "is_child_company": "No",
         }
         s = CompanySummary.from_api_response(data)
         assert s.slug == "acme-corp"
@@ -197,8 +197,8 @@ class TestCompanySummary:
         assert s.country == "United States"
         assert s.linkedin == "https://linkedin.com/company/acme"
         assert s.industry_id == 42
-        assert s.is_parent_company == 1
-        assert s.is_child_company == 0
+        assert s.is_parent_company == "Yes"
+        assert s.is_child_company == "No"
 
     def test_empty_dict(self):
         s = CompanySummary.from_api_response({})
