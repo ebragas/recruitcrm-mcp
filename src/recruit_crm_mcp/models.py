@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .formatting import html_to_md
 
@@ -302,6 +303,20 @@ class Associations(BaseModel):
     contacts: list[str] = Field(default_factory=list)
     jobs: list[str] = Field(default_factory=list)
     deals: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_json_string(cls, data: Any) -> Any:
+        # Some MCP clients stringify nested object args. Accept a JSON-encoded
+        # object so callers don't have to guess the wire shape.
+        if isinstance(data, str):
+            try:
+                return json.loads(data)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"associated must be a JSON object or null; got invalid JSON: {e}"
+                ) from e
+        return data
 
 
 class LookupItem(BaseModel):

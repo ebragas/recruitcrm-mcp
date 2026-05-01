@@ -457,6 +457,33 @@ class TestAssociations:
         with pytest.raises(ValidationError):
             Associations(unknown=["x"])
 
+    def test_accepts_json_encoded_string(self):
+        # Some MCP clients stringify nested object args before sending. The
+        # model must transparently parse the JSON so tools that take an
+        # `Associations` argument don't fail FastMCP arg validation.
+        a = Associations.model_validate(
+            '{"jobs": ["job-1"], "companies": ["comp-1"]}'
+        )
+        assert a.jobs == ["job-1"]
+        assert a.companies == ["comp-1"]
+        assert a.candidates == []
+
+    def test_invalid_json_string_raises_clear_error(self):
+        with pytest.raises(ValidationError, match="invalid JSON"):
+            Associations.model_validate("not-json{")
+
+    def test_string_routes_through_optional_union(self):
+        # FastMCP wraps each tool arg in Optional[X]. Confirm a stringified
+        # JSON object still resolves to Associations under union mode — this
+        # is the actual call shape that fires on every tools/call.
+        from pydantic import TypeAdapter
+
+        adapter = TypeAdapter(Associations | None)
+        a = adapter.validate_python('{"jobs": ["job-1"]}')
+        assert a is not None
+        assert a.jobs == ["job-1"]
+        assert adapter.validate_python(None) is None
+
 
 class TestLookupItem:
     def test_from_api_response_normal(self):
