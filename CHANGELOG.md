@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v0.18.2 (2026-05-01)
+
+### Bug Fixes
+
+- **MAIN-805**: Filter 4xx upstream-API errors from Sentry
+  ([#39](https://github.com/ebragas/recruitcrm-mcp/pull/39),
+  [`cbb6c5b`](https://github.com/ebragas/recruitcrm-mcp/commit/cbb6c5b13fb8f980b131baf8e2e946b5753f4d0f))
+
+* chore: initialize branch for MAIN-805
+
+* fix(MAIN-805): filter 4xx upstream-API errors from Sentry capture
+
+Add a before_send hook that drops Sentry events whose root cause is a 4xx response from the Recruit
+  CRM API. These are user-input errors (bad slugs, already-assigned candidates, etc.) the API
+  surfaces correctly to the caller — they aren't production bugs and were eroding signal-to-noise in
+  Sentry (PYTHON-6, PYTHON-8).
+
+5xx, network errors, ValidationError, and unhandled exceptions still capture normally.
+
+Implements MAIN-805.
+
+---------
+
+Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+
 ## v0.18.1 (2026-05-01)
 
 ### Bug Fixes
@@ -41,6 +67,11 @@ Adds two test cases pinning the new behavior.
 ---------
 
 Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+### Chores
+
+- **release**: 0.18.1
+  ([`a4d38e1`](https://github.com/ebragas/recruitcrm-mcp/commit/a4d38e18e72036eebfb58f1b61d46329c81ef99c))
 
 
 ## v0.18.0 (2026-05-01)
