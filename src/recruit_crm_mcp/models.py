@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .formatting import html_to_md
+
 
 RelatedToType = Literal["candidate", "company", "contact", "job", "deal"]
 
@@ -166,7 +168,7 @@ class NoteSummary(BaseModel):
         return cls(
             id=data.get("id"),
             note_type=type_label,
-            description=data.get("description"),
+            description=html_to_md(data.get("description")),
             related_to=data.get("related_to"),
             related_to_type=data.get("related_to_type"),
             created_on=data.get("created_on"),

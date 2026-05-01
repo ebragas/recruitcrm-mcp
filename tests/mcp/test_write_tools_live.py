@@ -68,6 +68,69 @@ async def test_create_note_live(mcp_client, test_candidate):
         await mcp_client.call_tool("delete_note", {"note_id": note_id})
 
 
+async def test_create_note_markdown_round_trips_live(mcp_client, test_candidate):
+    """Markdown sent to ``create_note`` round-trips back as Markdown via ``get_note``.
+
+    Verifies the full bidirectional conversion: MD→HTML on POST (so the CRM UI
+    renders cleanly), HTML→MD on GET (so the model sees clean structured text).
+    """
+    posted = (
+        "Met with **Jane**.\n\n"
+        "- Strong React skills\n"
+        "- Open to remote\n\n"
+        "Link: [LinkedIn](https://www.linkedin.com/in/jane)"
+    )
+    result = await mcp_client.call_tool(
+        "create_note",
+        {
+            "description": posted,
+            "related_to": {"kind": "candidate", "id": test_candidate},
+        },
+    )
+    assert result.is_error is False, f"create_note errored: {result.content!r}"
+    note_id = int(_write_result_dict(result)["id"])
+    try:
+        fetched = await mcp_client.call_tool("get_note", {"note_id": note_id})
+        assert fetched.is_error is False, f"get_note errored: {fetched.content!r}"
+        returned = fetched.data.get("description")
+        assert returned == posted, (
+            f"Markdown round-trip mismatch.\nposted:   {posted!r}\nreturned: {returned!r}"
+        )
+        # Sanity: no raw HTML tags should leak through.
+        assert "<" not in returned, f"raw HTML in returned description: {returned!r}"
+    finally:
+        await mcp_client.call_tool("delete_note", {"note_id": note_id})
+
+
+async def test_update_note_live(mcp_client, test_candidate):
+    """``update_note`` patches description; round-trips Markdown through the same conversion."""
+    created = await mcp_client.call_tool(
+        "create_note",
+        {
+            "description": "original",
+            "related_to": {"kind": "candidate", "id": test_candidate},
+        },
+    )
+    assert created.is_error is False, f"create_note errored: {created.content!r}"
+    note_id = int(_write_result_dict(created)["id"])
+    try:
+        new_body = "Updated:\n\n- one\n- two"
+        updated = await mcp_client.call_tool(
+            "update_note",
+            {"note_id": note_id, "description": new_body},
+        )
+        assert updated.is_error is False, f"update_note errored: {updated.content!r}"
+        assert _write_result_dict(updated)["kind"] == "note"
+
+        fetched = await mcp_client.call_tool("get_note", {"note_id": note_id})
+        assert fetched.is_error is False, f"get_note errored: {fetched.content!r}"
+        assert fetched.data.get("description") == new_body, (
+            f"expected updated body, got {fetched.data.get('description')!r}"
+        )
+    finally:
+        await mcp_client.call_tool("delete_note", {"note_id": note_id})
+
+
 async def test_log_meeting_live_with_attendees(mcp_client, test_candidate):
     """``log_meeting`` with candidate attendee round-trips through live API.
 

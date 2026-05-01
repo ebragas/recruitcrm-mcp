@@ -1260,6 +1260,8 @@ class TestWrites:
     """
 
     async def test_create_note_round_trip(self, test_candidate):
+        # Raw client layer: no MD↔HTML conversion (that lives in server.py).
+        # Plain strings round-trip byte-equal at this level.
         description = _test_label("Note")
         payload = {
             "description": description,
@@ -1275,6 +1277,28 @@ class TestWrites:
             assert fetched.get("description") == description
             assert fetched.get("related_to") == test_candidate
             assert fetched.get("related_to_type") == "candidate"
+        finally:
+            await client.delete(f"/notes/{note_id}")
+
+    async def test_update_note_round_trip(self, test_candidate):
+        """Raw client ``update_note`` round-trip — partial patch."""
+        created = await client.create_note({
+            "description": _test_label("OrigNote"),
+            "related_to": test_candidate,
+            "related_to_type": "candidate",
+        })
+        note_id = created.get("id")
+        assert note_id, f"create failed: {created!r}"
+        try:
+            patched = "patched note body"
+            updated = await client.update_note(note_id, {"description": patched})
+            assert updated.get("id") == note_id
+            fetched = await client.get_note(note_id)
+            assert fetched.get("description") == patched
+            # related_to should survive a partial update
+            assert fetched.get("related_to") == test_candidate, (
+                f"related_to not preserved: {fetched.get('related_to')!r}"
+            )
         finally:
             await client.delete(f"/notes/{note_id}")
 

@@ -13,6 +13,7 @@ from fastmcp.exceptions import ToolError
 
 from recruit_crm_mcp import __version__, client
 from recruit_crm_mcp.client import RecruitCrmError
+from recruit_crm_mcp.formatting import html_to_md, md_to_html
 from recruit_crm_mcp.models import (
     AssignedCandidateSummary,
     Associations,
@@ -335,8 +336,15 @@ async def search_companies(
 
 @mcp.tool()
 async def get_note(note_id: int) -> dict:
-    """Get full details for a specific note by ID."""
-    return await client.get_note(note_id)
+    """Get full details for a specific note by ID.
+
+    The ``description`` field is normalized from the CRM's stored HTML to
+    Markdown before being returned to the model.
+    """
+    note = await client.get_note(note_id)
+    if "description" in note:
+        note["description"] = html_to_md(note["description"])
+    return note
 
 
 @mcp.tool()
@@ -365,8 +373,15 @@ async def search_notes(
 
 @mcp.tool()
 async def get_task(task_id: int) -> dict:
-    """Get full details for a specific task by ID."""
-    return await client.get_task(task_id)
+    """Get full details for a specific task by ID.
+
+    The ``description`` field is normalized from the CRM's stored HTML to
+    Markdown before being returned to the model.
+    """
+    task = await client.get_task(task_id)
+    if "description" in task:
+        task["description"] = html_to_md(task["description"])
+    return task
 
 
 @mcp.tool()
@@ -404,8 +419,15 @@ async def search_tasks(
 
 @mcp.tool()
 async def get_meeting(meeting_id: int) -> dict:
-    """Get full details for a specific meeting by ID."""
-    return await client.get_meeting(meeting_id)
+    """Get full details for a specific meeting by ID.
+
+    The ``description`` field is normalized from the CRM's stored HTML to
+    Markdown before being returned to the model.
+    """
+    meeting = await client.get_meeting(meeting_id)
+    if "description" in meeting:
+        meeting["description"] = html_to_md(meeting["description"])
+    return meeting
 
 
 @mcp.tool()
@@ -591,6 +613,8 @@ async def log_meeting(
     ``reminder`` accepts: -1 (no reminder), 0, 15, 30, 60, 120, 1440 (minutes before).
     ``do_not_send_calendar_invites`` defaults to True — safe for historical logging;
     set False to actually send invites to attendees.
+    ``description`` accepts Markdown — converted to HTML before POST so the
+    Recruit CRM UI renders bullets/bold/links correctly.
     """
     payload = _build_payload({
         "title": title,
@@ -602,7 +626,7 @@ async def log_meeting(
         "attendee_contacts": client._join(attendee_contacts),
         "attendee_candidates": client._join(attendee_candidates),
         "attendee_users": client._join(attendee_users),
-        "description": description,
+        "description": md_to_html(description),
         "address": address,
         "meeting_type_id": meeting_type_id,
         "owner_id": owner_id,
@@ -627,11 +651,15 @@ async def create_note(
 ) -> WriteResult:
     """Create a note via POST /v1/notes.
 
+    ``description`` accepts Markdown — paragraphs, ``- bullets``, ``**bold**``,
+    ``*italic*``, and ``[links](url)`` render correctly in the Recruit CRM UI.
+    The MCP layer converts to HTML before posting and back to Markdown on read.
+
     ``related_to`` is the primary anchor entity. Use ``associated`` to cross-link
     the note to additional candidates/companies/contacts/jobs/deals.
     """
     payload = _build_payload({
-        "description": description,
+        "description": md_to_html(description),
         "related_to": related_to.id,
         "related_to_type": related_to.kind,
         "note_type_id": note_type_id,
@@ -640,6 +668,34 @@ async def create_note(
         payload.update(client._associations_to_payload(associated))
     try:
         response = await client.create_note(payload)
+    except RecruitCrmError as exc:
+        _reraise_as_tool_error(exc)
+    return _write_result_from("note", response)
+
+
+@mcp.tool()
+async def update_note(
+    note_id: int,
+    description: str | None = None,
+    note_type_id: int | None = None,
+    associated: Associations | None = None,
+) -> WriteResult:
+    """Update an existing note via POST /v1/notes/{id} — partial update.
+
+    Only provided fields are sent; omitted fields are preserved server-side.
+
+    ``description`` accepts Markdown (see ``create_note``).
+    Use ``associated`` to add cross-links to additional candidates/companies/
+    contacts/jobs/deals.
+    """
+    patch = _build_payload({
+        "description": md_to_html(description),
+        "note_type_id": note_type_id,
+    })
+    if associated is not None:
+        patch.update(client._associations_to_payload(associated))
+    try:
+        response = await client.update_note(note_id, patch)
     except RecruitCrmError as exc:
         _reraise_as_tool_error(exc)
     return _write_result_from("note", response)
@@ -662,12 +718,14 @@ async def create_task(
     ``related_to`` is optional but recommended for easy discovery.
     ``reminder`` accepts: -1 (no reminder), 0, 15, 30, 60, 1440 (minutes before);
     defaults to 1440 (1 day before).
+    ``description`` accepts Markdown — converted to HTML before POST so the
+    Recruit CRM UI renders bullets/bold/links correctly.
     """
     fields: dict = {
         "title": title,
         "start_date": start_date,
         "reminder": reminder,
-        "description": description,
+        "description": md_to_html(description),
         "task_type_id": task_type_id,
         "owner_id": owner_id,
     }
@@ -697,14 +755,15 @@ async def update_task(
 
     Only non-None fields are forwarded; omitted fields are preserved.
     ``task_type_id`` is the integer ID from ``list_task_types``; omit to keep
-    current type. NOTE: marking a task complete is not supported by the
+    current type. ``description`` accepts Markdown.
+    NOTE: marking a task complete is not supported by the
     Recruit CRM API on this endpoint — the ``status`` field is silently
     ignored (see CLAUDE.md). Delete the task or use the RCRM UI instead.
     """
     patch = _build_payload({
         "title": title,
         "start_date": start_date,
-        "description": description,
+        "description": md_to_html(description),
         "task_type_id": task_type_id,
         "owner_id": owner_id,
     })
@@ -1182,13 +1241,13 @@ async def update_meeting(
 
     Only non-None fields are forwarded; omitted fields are preserved server-side.
     Attendee and association lists are joined into comma-separated strings to
-    match the create-endpoint shape.
+    match the create-endpoint shape. ``description`` accepts Markdown.
     """
     fields: dict = {
         "title": title,
         "start_date": start_date,
         "end_date": end_date,
-        "description": description,
+        "description": md_to_html(description),
         "address": address,
         "meeting_type_id": meeting_type_id,
         "reminder": reminder,
