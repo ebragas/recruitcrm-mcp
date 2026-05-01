@@ -1,7 +1,54 @@
 # CHANGELOG
 
 
+## v0.18.1 (2026-05-01)
+
+### Bug Fixes
+
+- **MAIN-804**: Associations accepts JSON-encoded string args
+  ([#38](https://github.com/ebragas/recruitcrm-mcp/pull/38),
+  [`fcd4d46`](https://github.com/ebragas/recruitcrm-mcp/commit/fcd4d46483e6b922b43d791168b5f52a104798ff))
+
+* fix(MAIN-804): Associations accepts JSON-encoded string args
+
+Some MCP clients stringify nested object arguments before invoking tools/call — the captured Sentry
+  event for create_note showed the client passing `associated` as the literal string '{"jobs":
+  [...], "companies": [...]}' rather than as a JSON object. FastMCP's TypeAdapter rejected it under
+  the Associations | None union before our handler ran, so the call failed with a Pydantic schema
+  error.
+
+Fix at the model boundary: Associations gets a model_validator(mode="before") that json.loads any
+  string input. Bad JSON yields a clear "invalid JSON" error instead of an opaque schema error.
+
+Cascades automatically to every tool that takes an Associations arg. Includes a
+  TypeAdapter[Associations | None] test that exercises the exact union-mode path FastMCP uses on
+  every tools/call.
+
+Fixes PYTHON-7
+
+* fix(MAIN-804): tighten Associations JSON-string validator (Copilot review)
+
+Two related fixes from PR review:
+
+- Drop "or null" from the error message. Stringified "null" doesn't actually round-trip to a valid
+  Associations on a non-Optional call shape, so the wording was misleading.
+
+- Reject valid JSON that isn't an object (array, scalar, parsed null) with the same clear "must be a
+  JSON object" message. Previously these fell through to an opaque Pydantic schema error.
+
+Adds two test cases pinning the new behavior.
+
+---------
+
+Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+
 ## v0.18.0 (2026-05-01)
+
+### Chores
+
+- **release**: 0.18.0
+  ([`cda0959`](https://github.com/ebragas/recruitcrm-mcp/commit/cda095912cf6a991b6758f2c40b2f0eb736dc353))
 
 ### Features
 
