@@ -1,8 +1,12 @@
 """Tests for the optional Sentry telemetry hook."""
 
+import sys
 from unittest.mock import patch
 
+import pytest
+
 from recruit_crm_mcp import telemetry
+from recruit_crm_mcp.client import RecruitCrmError
 
 
 def test_init_telemetry_no_op_without_dsn(monkeypatch):
@@ -107,6 +111,87 @@ def test_init_telemetry_traces_rate_clamped_below_zero(monkeypatch):
     with patch("sentry_sdk.init") as mock_init:
         telemetry.init_telemetry()
         assert mock_init.call_args.kwargs["traces_sample_rate"] == 0.0
+
+
+def test_init_telemetry_registers_before_send(monkeypatch):
+    """The before_send hook must be wired into sentry_sdk.init so that 4xx
+    upstream errors can be filtered."""
+    monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_DSN", "https://x@o1.ingest.sentry.io/1")
+    with patch("sentry_sdk.init") as mock_init:
+        telemetry.init_telemetry()
+        assert mock_init.call_args.kwargs["before_send"] is telemetry._before_send
+
+
+def _exc_info(exc: BaseException) -> tuple:
+    """Build a sys.exc_info()-shaped tuple by raising and catching."""
+    try:
+        raise exc
+    except BaseException:
+        return sys.exc_info()
+
+
+@pytest.mark.parametrize("status", [400, 404, 422, 429, 499])
+def test_before_send_drops_4xx_upstream_errors(status):
+    err = RecruitCrmError(status, {"message": "bad input"}, "GET", "/companies/1234")
+    result = telemetry._before_send({"event": "x"}, {"exc_info": _exc_info(err)})
+    assert result is None
+
+
+@pytest.mark.parametrize("status", [500, 502, 503, 504])
+def test_before_send_keeps_5xx_upstream_errors(status):
+    err = RecruitCrmError(status, "boom", "POST", "/jobs")
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(err)})
+    assert result is event
+
+
+def test_before_send_keeps_validation_error():
+    """Pydantic / schema validation errors are server bugs (PYTHON-5/-7) we
+    want to know about."""
+    err = ValueError("schema validation failed")
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(err)})
+    assert result is event
+
+
+def test_before_send_keeps_network_error():
+    """httpx ConnectError / TimeoutException have no `status` attribute and
+    must continue to capture."""
+    import httpx
+
+    err = httpx.ConnectError("DNS lookup failed")
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(err)})
+    assert result is event
+
+
+def test_before_send_keeps_unhandled_exception():
+    err = RuntimeError("unexpected")
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(err)})
+    assert result is event
+
+
+def test_before_send_drops_4xx_wrapped_in_outer_exception():
+    """FastMCP wraps tool exceptions; the RecruitCrmError sits behind
+    __cause__. Filter must still drop the event."""
+    inner = RecruitCrmError(404, "not found", "GET", "/companies/1234")
+    try:
+        try:
+            raise inner
+        except RecruitCrmError as e:
+            raise RuntimeError("Tool failed") from e
+    except RuntimeError:
+        info = sys.exc_info()
+    result = telemetry._before_send({"event": "x"}, {"exc_info": info})
+    assert result is None
+
+
+def test_before_send_no_exc_info_keeps_event():
+    """Non-exception events (e.g. messages) pass through unchanged."""
+    event = {"message": "hello"}
+    result = telemetry._before_send(event, {})
+    assert result is event
 
 
 def test_init_telemetry_suppresses_log_derived_events(monkeypatch):

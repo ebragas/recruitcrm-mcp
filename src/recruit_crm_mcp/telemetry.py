@@ -18,10 +18,44 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 from recruit_crm_mcp import __version__
+from recruit_crm_mcp.client import RecruitCrmError
 
 logger = logging.getLogger(__name__)
+
+
+def _is_upstream_4xx(exc: BaseException | None) -> bool:
+    """Walk the exception chain looking for a 4xx upstream API error.
+
+    FastMCP wraps tool exceptions, so the original RecruitCrmError may sit
+    behind __cause__ / __context__ links. Any 4xx anywhere in the chain
+    means the event is rooted in a user-side error from the upstream API.
+    """
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, RecruitCrmError) and 400 <= exc.status < 500:
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+def _before_send(
+    event: dict[str, Any], hint: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Drop Sentry events caused by 4xx responses from the upstream API.
+
+    These are user-input errors (bad slugs, already-assigned candidates, etc.)
+    that the API surfaces correctly to the caller — they aren't production
+    bugs. 5xx, network errors, ValidationError, and unhandled exceptions
+    still capture normally.
+    """
+    exc_info = hint.get("exc_info")
+    if exc_info and _is_upstream_4xx(exc_info[1]):
+        return None
+    return event
 
 
 def _parse_traces_rate(raw: str | None) -> float:
@@ -63,6 +97,7 @@ def init_telemetry() -> bool:
         traces_sample_rate=_parse_traces_rate(
             os.getenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE")
         ),
+        before_send=_before_send,
         integrations=[
             MCPIntegration(include_prompts=True),
             # FastMCP logs every tool exception at error level before re-raising
