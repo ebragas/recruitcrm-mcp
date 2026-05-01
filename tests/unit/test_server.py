@@ -357,8 +357,8 @@ class TestSearchCompaniesTool:
                 "country": "US",
                 "linkedin": None,
                 "industry_id": 42,
-                "is_parent_company": 0,
-                "is_child_company": 0,
+                "is_parent_company": "No",
+                "is_child_company": "No",
             },
         ]
 

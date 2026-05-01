@@ -204,6 +204,7 @@ cython_debug/
 # Maintainer-only TODO scratchpad
 TODO.md
 
+
 # Ruff stuff:
 .ruff_cache/
 

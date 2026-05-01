@@ -132,8 +132,8 @@ class CompanySummary(BaseModel):
     country: str | None = None
     linkedin: str | None = None
     industry_id: int | None = None
-    is_parent_company: int | None = None
-    is_child_company: int | None = None
+    is_parent_company: str | None = None
+    is_child_company: str | None = None
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> CompanySummary:
