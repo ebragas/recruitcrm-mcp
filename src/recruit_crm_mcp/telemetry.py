@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from typing import Any
 
 from recruit_crm_mcp import __version__
@@ -119,5 +120,11 @@ def init_telemetry() -> bool:
             LoggingIntegration(event_level=None),
         ],
     )
+    # Stamp every span with a per-process ID. The MCP stdio transport has no
+    # native session ID, and each tools/call is its own root trace, so without
+    # this tag there's no way to group calls made within one server lifetime
+    # (= one Claude Desktop launch). Lets dashboards answer "which tools get
+    # called together in one session" and "what's the ordered sequence."
+    sentry_sdk.set_tag("recruit_crm_mcp.process_id", uuid.uuid4().hex)
     logger.info("Sentry initialized for recruit-crm-mcp@%s", __version__)
     return True
