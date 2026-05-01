@@ -741,11 +741,12 @@ async def create_note(payload: dict[str, Any]) -> dict:
     return await post("/notes", payload) or {}
 
 
-async def update_note(note_id: int, patch: dict[str, Any]) -> dict:
+async def update_note(note_id: int | str, patch: dict[str, Any]) -> dict:
     """POST /notes/{id} — partial update. See docs/api-reference/edit-a-note.md.
 
     Every body field is optional; the API preserves fields omitted from the
-    payload. Non-None values in ``patch`` are sent as-is.
+    payload. Non-None values in ``patch`` are sent as-is. ``note_id`` accepts
+    int or str to match ``get_note``.
     """
     return await post(f"/notes/{note_id}", patch) or {}
 
