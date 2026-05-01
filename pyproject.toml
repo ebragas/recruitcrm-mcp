@@ -16,6 +16,12 @@ dependencies = [
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
     "sentry-sdk[mcp]>=2.20.0",
+    "markdown-it-py>=3.0.0",
+    "markdownify>=0.11.0",
+    # Used directly in formatting.py for pre-conversion subtree pruning.
+    # markdownify ships bs4 transitively today, but declare it explicitly
+    # so we don't break if that dep set ever changes.
+    "beautifulsoup4>=4.12.0",
 ]
 
 [project.urls]

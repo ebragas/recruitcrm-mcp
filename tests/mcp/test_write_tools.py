@@ -74,7 +74,8 @@ async def test_create_note_flattens_entity_ref(mcp_client, monkeypatch):
 
     assert not result.is_error
     payload = captured["payload"]
-    assert payload["description"] == "Hello"
+    # description is normalized Markdown→HTML before POST.
+    assert payload["description"] == "<p>Hello</p>"
     assert payload["related_to"] == "cand-1"
     assert payload["related_to_type"] == "candidate"
     assert "note_type_id" not in payload  # None-valued args must be dropped
@@ -171,7 +172,8 @@ async def test_log_meeting_builds_full_payload(mcp_client, monkeypatch):
     assert payload["meeting_type_id"] == 40014
     assert payload["owner_id"] == 5
     assert payload["address"] == "Zoom"
-    assert payload["description"] == "desc"
+    # description is normalized Markdown→HTML before POST.
+    assert payload["description"] == "<p>desc</p>"
 
 
 async def test_log_meeting_bool_false_coerces_to_zero(mcp_client, monkeypatch):

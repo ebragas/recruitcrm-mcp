@@ -103,6 +103,7 @@ async def test_write_tool_schemas_have_required_params(mcp_client):
 
     expectations = {
         "create_note": {"description", "related_to"},
+        "update_note": {"note_id"},
         "log_meeting": {"title", "related_to"},
         "create_task": {"title"},
     }

@@ -792,7 +792,8 @@ class TestCreateNoteTool:
         )
 
         payload = captured["payload"]
-        assert payload["description"] == "Spoke with candidate"
+        # description is normalized Markdown→HTML before POST.
+        assert payload["description"] == "<p>Spoke with candidate</p>"
         assert payload["related_to"] == "cand-1"
         assert payload["related_to_type"] == "candidate"
         assert payload["note_type_id"] == 3
@@ -929,10 +930,11 @@ class TestUpdateTaskTool:
         )
 
         assert captured["task_id"] == 5
+        # description is normalized Markdown→HTML before POST.
         assert captured["patch"] == {
             "title": "New title",
             "start_date": "2025-06-01T00:00:00Z",
-            "description": "d",
+            "description": "<p>d</p>",
             "owner_id": 1234,
         }
 

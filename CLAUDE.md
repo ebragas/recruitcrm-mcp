@@ -85,6 +85,7 @@ uv run <cmd>     # run commands in the venv
 - `/notes` list endpoint accepts `limit` param
 - `/notes/search` returns `[]` with no filter params
 - Note `note_type` is an object: `{"id": 48622, "label": "Note"}`
+- **Note / task / meeting `description` is HTML in Recruit CRM.** The web editor stores and renders it as rich-text HTML (`<p>`, `<ul>`, `<strong>`, etc.). Plain-text and Markdown bodies render as a wall of text in the UI (newlines collapse, `**` and `[link](url)` show literal — verified empirically across notes, tasks, and meetings). The MCP layer normalizes Markdown↔HTML at the tool boundary: `create_note` / `update_note` / `create_task` / `update_task` / `log_meeting` / `update_meeting` convert Markdown→HTML before POST; `get_note` / `search_notes` (via `NoteSummary.from_api_response`) / `get_task` / `get_meeting` convert HTML→Markdown on return. The model writes Markdown and reads Markdown; the CRM stores HTML. See `src/recruit_crm_mcp/formatting.py`. The raw client layer does NOT convert — pass HTML if you call it directly.
 - Tasks use `id` (integer) not `slug` — `GET /tasks/{id}`
 - `/tasks/search` supports: `title`, `created_from/to`, `updated_from/to`, `starting_from/to`, `owner_id` — does NOT accept `related_to` or `related_to_type` (422 rejected)
 - `/tasks` list endpoint accepts `limit` param

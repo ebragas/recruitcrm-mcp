@@ -245,6 +245,23 @@ class TestNoteSummary:
         assert s.created_on is None
         assert s.updated_on is None
 
+    def test_description_html_normalized_to_markdown(self):
+        data = {
+            "id": 1,
+            "description": (
+                "<p>Met with <strong>Jane</strong>.</p>"
+                "<ul><li>Item one</li><li>Item two</li></ul>"
+                '<p>See <a href="https://x.example/y">link</a>.</p>'
+            ),
+        }
+        s = NoteSummary.from_api_response(data)
+        assert s.description == (
+            "Met with **Jane**.\n\n"
+            "- Item one\n"
+            "- Item two\n\n"
+            "See [link](https://x.example/y)."
+        )
+
 
 class TestTaskSummary:
     def test_from_api_response(self):

@@ -741,6 +741,20 @@ async def create_note(payload: dict[str, Any]) -> dict:
     return await post("/notes", payload) or {}
 
 
+async def update_note(note_id: int | str, patch: dict[str, Any]) -> dict:
+    """POST /notes/{id} — partial update. See docs/api-reference/edit-a-note.md.
+
+    Every body field is optional; the API preserves fields omitted from the
+    payload. ``None``-valued entries in ``patch`` are dropped before POST so
+    callers can pass a uniform shape regardless of which fields they intend
+    to update — matches the pattern used by every other ``update_*`` helper.
+    ``note_id`` accepts int or str to match ``get_note``.
+    """
+    clean = {k: v for k, v in patch.items() if v is not None}
+    result = await post(f"/notes/{note_id}", clean)
+    return result or {}
+
+
 async def create_task(payload: dict[str, Any]) -> dict:
     """POST /v1/tasks — see docs/api-reference/creates-a-new-task.md."""
     return await post("/tasks", payload) or {}
