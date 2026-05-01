@@ -472,6 +472,20 @@ class TestAssociations:
         with pytest.raises(ValidationError, match="invalid JSON"):
             Associations.model_validate("not-json{")
 
+    def test_json_array_string_raises_clear_error(self):
+        # Valid JSON that isn't an object should yield the same clear
+        # "must be a JSON object" message rather than a generic Pydantic
+        # schema error.
+        with pytest.raises(ValidationError, match="must be a JSON object"):
+            Associations.model_validate('["job-1"]')
+
+    def test_json_null_string_raises_clear_error(self):
+        # Stringified null parses to None; on a non-Optional Associations
+        # call site that should fail with the same clear object-required
+        # message rather than a downstream "list_type" error.
+        with pytest.raises(ValidationError, match="must be a JSON object"):
+            Associations.model_validate("null")
+
     def test_string_routes_through_optional_union(self):
         # FastMCP wraps each tool arg in Optional[X]. Confirm a stringified
         # JSON object still resolves to Associations under union mode — this

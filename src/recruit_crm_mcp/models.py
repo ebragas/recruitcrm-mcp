@@ -311,11 +311,14 @@ class Associations(BaseModel):
         # object so callers don't have to guess the wire shape.
         if isinstance(data, str):
             try:
-                return json.loads(data)
+                parsed = json.loads(data)
             except json.JSONDecodeError as e:
                 raise ValueError(
-                    f"associated must be a JSON object or null; got invalid JSON: {e}"
+                    f"associated must be a JSON object; got invalid JSON: {e}"
                 ) from e
+            if not isinstance(parsed, dict):
+                raise ValueError("associated must be a JSON object")
+            return parsed
         return data
 
 
