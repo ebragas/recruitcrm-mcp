@@ -19,10 +19,17 @@ class TestMdToHtml:
     def test_link(self):
         assert md_to_html("[X](https://x.example)") == '<p><a href="https://x.example">X</a></p>'
 
-    def test_passes_html_through(self):
-        # CommonMark allows raw HTML in Markdown — useful safety net for
-        # callers who already send HTML.
-        assert md_to_html("<p>already html</p>") == "<p>already html</p>"
+    def test_escapes_raw_html(self):
+        # Raw HTML in caller input must NOT pass through verbatim — it could
+        # carry <script>, inline event handlers, or other unsafe markup that
+        # would be POSTed to the CRM as-is.
+        out = md_to_html("<p>not html</p>")
+        assert out == "<p>&lt;p&gt;not html&lt;/p&gt;</p>"
+
+    def test_escapes_script_tag(self):
+        out = md_to_html("<script>alert(1)</script>")
+        assert "<script>" not in out
+        assert "&lt;script&gt;" in out
 
     @pytest.mark.parametrize("value", [None, ""])
     def test_passthrough_empty(self, value):
