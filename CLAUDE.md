@@ -19,6 +19,20 @@ uv sync          # install dependencies and create venv
 uv run <cmd>     # run commands in the venv
 ```
 
+### Make Targets
+
+| Target | What it does |
+|---|---|
+| `make check` | Lint (`ruff check`) + unit tests — the canonical "before you commit" gate |
+| `make lint` | Ruff only |
+| `make test` | Unit tests only (`pytest -m "not integration and not mcp_live"`) |
+| `make coverage` | Unit tests with coverage report |
+| `make integration-test` | Tests against the live Recruit CRM API (requires `RECRUIT_CRM_API_KEY`) |
+| `make mcp-test` | MCP-protocol tests against the in-process server |
+| `make mcp-live-test` | MCP-protocol tests against the published wheel via `uvx` |
+| `make smoke` | End-to-end smoke from local working tree (ping + list_note_types). Add `--from-pypi` to test the published wheel instead. |
+| `make fetch-docs` | Refresh `docs/recruitcrm/` with the latest API reference (gitignored) |
+
 ## Recruit CRM API Reference
 
 - **Base URL:** `https://api.recruitcrm.io/v1`
@@ -132,6 +146,11 @@ uv run <cmd>     # run commands in the venv
 ### Code Style
 
 - Source layout: `src/recruit_crm_mcp/`
+  - `server.py` — FastMCP tool definitions; one tool per logical API operation
+  - `client.py` — async HTTPX wrapper around the Recruit CRM API
+  - `models.py` — Pydantic models for tool inputs/outputs (summaries, write results, custom fields)
+  - `formatting.py` — Markdown↔HTML conversion at the note/task/meeting tool boundary
+  - `telemetry.py` — Sentry capture (optional, opt-in via `SENTRY_DSN`) and `report_issue` tool
 - Keep tools focused — one tool per logical API operation
 - API key via `RECRUIT_CRM_API_KEY` environment variable
 - **No backward compatibility shims.** This is an MCP server, not a library — there are no external callers. When signatures change, update all internal call sites and delete the old code. Don't add deprecation wrappers or keep dead parameters around.
@@ -150,6 +169,7 @@ uv run <cmd>     # run commands in the venv
 6. Use `/commit-commands:commit-push-pr` to commit, push, and open a PR
 7. Request Copilot review: `gh api repos/ebragas/recruitcrm-mcp/pulls/<PR_NUMBER>/requested_reviewers --method POST -f 'reviewers[]=Copilot'`
 8. Transition the Linear issue to "In Review"
+9. **After merge, verify the release shipped.** Run `gh run list --branch main --workflow Release --limit 1` and confirm a new `chore(release): X.Y.Z` commit landed on `main`. If not, semantic-release skipped the merge — the PR title was missing a Conventional Commits `<type>:` prefix. Open a follow-up PR with a `feat:` or `fix:` title to trigger the release.
 
 ### Test-Driven API Development
 
@@ -163,10 +183,16 @@ uv run <cmd>     # run commands in the venv
 ### Linear Integration
 
 - Agent ID: `claude-code-recruitcrm-mcp`
-- **Linear project:** `Build Recruit CRM MCP` — always include `--project "Build Recruit CRM MCP"` when creating issues
+- **Linear project:** `Build Recruit CRM MCP v1.0` — always include `--project "Build Recruit CRM MCP v1.0"` when creating issues
 - Comment on issues when starting and completing work
 - Transition issues through: Todo → In Progress → In Review → Done
 - Valid states: Backlog, Todo, In Progress, In Review, Done, Canceled, Duplicate
+
+### Production error triage
+
+- Errors are captured in Sentry org `magic-co`, project `python` — opt-in via the user's `SENTRY_DSN` env var (telemetry is off by default). See `src/recruit_crm_mcp/telemetry.py`.
+- The `report_issue` tool lets a user file a Sentry event from inside the MCP session.
+- Use the Sentry MCP (`mcp__Sentry__search_issues`, `get_sentry_resource`, `update_issue`) to triage. To auto-resolve a Sentry issue when a fix merges, include `Fixes PYTHON-N` on its own line in the PR body — the GitHub-Sentry integration matches that pattern.
 
 ### Pre-release workflow
 
