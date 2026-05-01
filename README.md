@@ -238,10 +238,10 @@ Set environment variables in your MCP client config (e.g. `claude_desktop_config
 | Var | Required | Default | Description |
 |---|---|---|---|
 | `RECRUIT_CRM_API_KEY` | yes | — | Recruit CRM API token. |
-| `RECRUIT_CRM_MCP_SENTRY_DSN` | no | unset | Your own Sentry project DSN. If set, tool-call exceptions are auto-reported to that project. See [Error reporting](#error-reporting) below. |
+| `RECRUIT_CRM_MCP_SENTRY_DSN` | no | unset | Your own Sentry project DSN. If set, tool-call exceptions and per-tool usage telemetry are auto-reported to that project. See [Error reporting](#error-reporting) below. |
 | `SENTRY_DSN` | no | unset | Fallback DSN if you already export it globally. `RECRUIT_CRM_MCP_SENTRY_DSN` takes precedence. |
 | `RECRUIT_CRM_MCP_ENV` | no | `production` | Sentry environment tag. |
-| `RECRUIT_CRM_MCP_SENTRY_TRACES_RATE` | no | `0.0` | Sentry trace sample rate (0.0–1.0). |
+| `RECRUIT_CRM_MCP_SENTRY_TRACES_RATE` | no | `1.0` | Sentry trace sample rate (0.0–1.0). Defaults to full sampling so the MCP Dashboard populates immediately. Lower it (e.g. `0.2`) if you're on a tight Sentry quota. Set `0.0` to disable tracing while keeping error capture. |
 
 ## Error reporting
 
@@ -253,7 +253,7 @@ When something goes wrong and you want to send a structured bug report, ask Clau
 
 ### 2. Sentry auto-capture (bring-your-own-DSN)
 
-If you want passive observability — every tool-call exception captured automatically with stack trace, span context, and HTTP breadcrumbs — set `RECRUIT_CRM_MCP_SENTRY_DSN` to a Sentry project DSN that you control. With no DSN set (the default), the MCP makes zero network calls to Sentry.
+If you want passive observability — every tool-call exception captured automatically with stack trace, span context, and HTTP breadcrumbs, plus a populated MCP Dashboard showing which tools your users actually call — set `RECRUIT_CRM_MCP_SENTRY_DSN` to a Sentry project DSN that you control. With no DSN set (the default), the MCP makes zero network calls to Sentry.
 
 This is **strictly bring-your-own-DSN**. We do not publish or embed a project DSN. If you want this, sign up for a free Sentry account, create a Python project, copy its DSN, and put it in your MCP client config:
 
@@ -272,7 +272,14 @@ This is **strictly bring-your-own-DSN**. We do not publish or embed a project DS
 }
 ```
 
-When enabled, the following ends up in *your* Sentry project: tool name, exception type and stack trace, tool arguments and return values (via `MCPIntegration(include_prompts=True)`), HTTPX breadcrumbs (URLs and status codes), MCP request/session IDs, and the package version. Recruit CRM data flowing through tools (candidate names, emails, company info) will appear in event payloads — that is the point, since most exceptions are unhelpful without the data that triggered them. Because the DSN is yours, the data only goes to your Sentry project.
+What you get in *your* Sentry project:
+
+- **Errors.** Tool name, exception type, stack trace, HTTPX breadcrumbs (URLs and status codes), MCP request/session IDs, and the package version.
+- **Usage telemetry.** Every tool invocation is captured as a span (`traces_sample_rate` defaults to `1.0`), tagged with tool name, arguments, result, duration, and transport. These populate Sentry's [MCP Dashboard](https://docs.sentry.io/product/insights/ai/mcp/dashboard/) — per-tool request count, error rate, p95 latency, client distribution. This is how you find out which tools your users actually use.
+
+Recruit CRM data flowing through tools (candidate names, emails, company info) will appear in span and event payloads — that's the point, since both errors and usage analysis are unhelpful without the data that triggered them. Because the DSN is yours, the data only goes to your Sentry project.
+
+If transaction volume is a concern (free Sentry plans cap at 5K events/month), set `RECRUIT_CRM_MCP_SENTRY_TRACES_RATE=0.2` for 20% sampling, or `0.0` to disable tracing entirely while keeping error capture.
 
 ## Privacy
 

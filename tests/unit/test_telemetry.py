@@ -80,8 +80,31 @@ def test_init_telemetry_traces_rate(monkeypatch):
 
 
 def test_init_telemetry_traces_rate_default(monkeypatch):
+    """Default is 1.0 so the Sentry MCP Dashboard populates with per-tool
+    usage data the moment a DSN is configured. Pinned: lowering this is a
+    user-visible behavior change that needs a CHANGELOG entry."""
     monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_DSN", "https://x@o1.ingest.sentry.io/1")
     monkeypatch.delenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE", raising=False)
+    with patch("sentry_sdk.init") as mock_init:
+        telemetry.init_telemetry()
+        assert mock_init.call_args.kwargs["traces_sample_rate"] == 1.0
+
+
+def test_init_telemetry_traces_rate_empty_string_uses_default(monkeypatch):
+    """Empty string is treated identically to unset — both fall through to
+    the default. Some shells export `FOO=` rather than unsetting."""
+    monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_DSN", "https://x@o1.ingest.sentry.io/1")
+    monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE", "")
+    with patch("sentry_sdk.init") as mock_init:
+        telemetry.init_telemetry()
+        assert mock_init.call_args.kwargs["traces_sample_rate"] == 1.0
+
+
+def test_init_telemetry_traces_rate_zero_disables_tracing(monkeypatch):
+    """0.0 is a valid override — users on tight Sentry quotas can opt out
+    of tracing entirely while still capturing errors."""
+    monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_DSN", "https://x@o1.ingest.sentry.io/1")
+    monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE", "0.0")
     with patch("sentry_sdk.init") as mock_init:
         telemetry.init_telemetry()
         assert mock_init.call_args.kwargs["traces_sample_rate"] == 0.0
@@ -89,12 +112,12 @@ def test_init_telemetry_traces_rate_default(monkeypatch):
 
 def test_init_telemetry_traces_rate_invalid_falls_back(monkeypatch):
     """Bad traces-rate input must not crash module import (init_telemetry runs
-    at import time in server.py)."""
+    at import time in server.py). Falls back to the default rate."""
     monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_DSN", "https://x@o1.ingest.sentry.io/1")
     monkeypatch.setenv("RECRUIT_CRM_MCP_SENTRY_TRACES_RATE", "not-a-number")
     with patch("sentry_sdk.init") as mock_init:
         telemetry.init_telemetry()
-        assert mock_init.call_args.kwargs["traces_sample_rate"] == 0.0
+        assert mock_init.call_args.kwargs["traces_sample_rate"] == 1.0
 
 
 def test_init_telemetry_traces_rate_clamped_above_one(monkeypatch):

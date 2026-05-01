@@ -11,7 +11,10 @@ Env vars:
     RECRUIT_CRM_MCP_ENV          Sentry environment tag. Default: production.
     RECRUIT_CRM_MCP_SENTRY_TRACES_RATE
                                  Float 0.0-1.0 for tracing sample rate.
-                                 Default 0.0 (tracing off).
+                                 Default 1.0 (every tool call traced) so the
+                                 Sentry MCP Dashboard populates with usage
+                                 data out of the box. Set lower (e.g. 0.2)
+                                 to reduce transaction volume on free plans.
 """
 
 from __future__ import annotations
@@ -58,22 +61,31 @@ def _before_send(
     return event
 
 
+_DEFAULT_TRACES_RATE = 1.0
+
+
 def _parse_traces_rate(raw: str | None) -> float:
     """Parse RECRUIT_CRM_MCP_SENTRY_TRACES_RATE, clamped to [0.0, 1.0].
 
     init_telemetry runs at module import; a malformed env var must not crash
-    server startup. Falls back to 0.0 (tracing off) with a warning.
+    server startup. Falls back to the default rate with a warning.
+
+    Default is 1.0 so the Sentry MCP Dashboard populates with per-tool usage
+    data as soon as a DSN is configured — that's the whole point of pointing
+    a DSN at this server. Users on tight quotas can dial it down via the
+    env var.
     """
     if raw is None or raw == "":
-        return 0.0
+        return _DEFAULT_TRACES_RATE
     try:
         value = float(raw)
     except ValueError:
         logger.warning(
-            "RECRUIT_CRM_MCP_SENTRY_TRACES_RATE=%r is not a float; falling back to 0.0",
+            "RECRUIT_CRM_MCP_SENTRY_TRACES_RATE=%r is not a float; falling back to %s",
             raw,
+            _DEFAULT_TRACES_RATE,
         )
-        return 0.0
+        return _DEFAULT_TRACES_RATE
     return max(0.0, min(1.0, value))
 
 
