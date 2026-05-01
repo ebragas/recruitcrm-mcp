@@ -10,6 +10,7 @@ Cleanup: leaves the entities in place. Run `make integration-sweep` after.
 import asyncio
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from recruit_crm_mcp import client
 
@@ -54,6 +55,12 @@ async def main() -> None:
 
     client.init_client()
     label = f"MCP-Test-FormatProbe-TM-{uuid.uuid4().hex[:8]}"
+    # Schedule probe entities ~14 days out so the script stays runnable
+    # indefinitely without hitting past-date validation in the API/UI.
+    start = datetime.now(timezone.utc) + timedelta(days=14)
+    end = start + timedelta(minutes=30)
+    start_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_iso = end.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         cand = await client.post("/candidates", {
             "first_name": label,
@@ -70,7 +77,7 @@ async def main() -> None:
         for fmt, body in (("PLAIN", PLAIN), ("MARKDOWN", MARKDOWN), ("HTML", HTML)):
             task = await client.create_task({
                 "title": f"{label} task ({fmt})",
-                "start_date": "2026-05-15T18:00:00Z",
+                "start_date": start_iso,
                 "reminder": -1,
                 "description": body,
                 "related_to": slug,
@@ -84,8 +91,8 @@ async def main() -> None:
         for fmt, body in (("PLAIN", PLAIN), ("MARKDOWN", MARKDOWN), ("HTML", HTML)):
             meeting = await client.create_meeting({
                 "title": f"{label} meeting ({fmt})",
-                "start_date": "2026-05-15T18:00:00Z",
-                "end_date": "2026-05-15T18:30:00Z",
+                "start_date": start_iso,
+                "end_date": end_iso,
                 "reminder": -1,
                 "description": body,
                 "related_to": slug,

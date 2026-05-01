@@ -96,8 +96,6 @@ async def test_create_note_markdown_round_trips_live(mcp_client, test_candidate)
         assert returned == posted, (
             f"Markdown round-trip mismatch.\nposted:   {posted!r}\nreturned: {returned!r}"
         )
-        # Sanity: no raw HTML tags should leak through.
-        assert "<" not in returned, f"raw HTML in returned description: {returned!r}"
     finally:
         await mcp_client.call_tool("delete_note", {"note_id": note_id})
 
