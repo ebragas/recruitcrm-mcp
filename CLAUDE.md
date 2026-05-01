@@ -127,7 +127,7 @@ uv run <cmd>     # run commands in the venv
 - Branch naming: `<issue-id>/<short-description>` (e.g., `MAIN-73/scaffold-mcp`)
 - Linear auto-tracks branches with issue IDs in the name
 - **Sequential issue chains:** When working multiple issues in sequence, branch each new issue off the previous issue's branch (not `main`). Set the parent branch as the PR base (`gh pr create --base <parent-branch>`) so each PR's diff only shows the new work. Link the parent PR in the description if helpful.
-- **PR titles must include the Linear issue ID** (e.g., `MAIN-87: fix jobs status filter`)
+- **PR titles must follow Conventional Commits AND include the Linear issue ID** as the scope: `<type>(MAIN-NNN): <description>` — e.g. `fix(MAIN-87): jobs status filter`, `feat(MAIN-73): scaffold MCP server`, `chore(MAIN-100): bump deps`. The `<type>` prefix is **required** — semantic-release silently skips merges without `feat:` / `fix:` / `BREAKING CHANGE:`, so a missing prefix means the work never reaches PyPI even though `main` is updated. Squash-merge uses the PR title as the commit message, so the title is what semantic-release sees.
 
 ### Code Style
 
