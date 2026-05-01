@@ -1226,7 +1226,7 @@ wheels = [
 
 [[package]]
 name = "recruit-crm-mcp"
-version = "0.18.0"
+version = "0.18.2"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -1256,7 +1256,7 @@ requires-dist = [
     { name = "markdown-it-py", specifier = ">=3.0.0" },
     { name = "markdownify", specifier = ">=0.11.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "sentry-sdk", extras = ["mcp"], specifier = ">=2.20.0" },
+    { name = "sentry-sdk", extras = ["mcp"], specifier = ">=2.43.0" },
 ]
 
 [package.metadata.requires-dev]
