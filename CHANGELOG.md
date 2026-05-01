@@ -1,7 +1,32 @@
 # CHANGELOG
 
 
+## v0.18.0 (2026-05-01)
+
+### Features
+
+- **MAIN-802**: Clarify Conventional Commits requirement, ship pending releases
+  ([#37](https://github.com/ebragas/recruitcrm-mcp/pull/37),
+  [`3942d37`](https://github.com/ebragas/recruitcrm-mcp/commit/3942d3711babda85640c4b95de7c32a394f947d4))
+
+Two merges since 0.17.0 (MAIN-797, MAIN-801) used "MAIN-NNN:" PR title prefixes that don't match
+  Conventional Commits, so semantic-release silently skipped them and the fixes never reached PyPI.
+  CLAUDE.md mandated the issue-ID prefix but never said it must also be Conventional Commits
+  compliant — this commit closes that gap.
+
+Doubles as the feat: trigger that bundles the two pending merges into 0.18.0: - MAIN-797:
+  update_note tool + Markdown<->HTML normalization - MAIN-801: CompanySummary is_parent_company /
+  is_child_company string types (Sentry PYTHON-5)
+
+Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+
 ## v0.17.0 (2026-04-28)
+
+### Chores
+
+- **release**: 0.17.0
+  ([`ef61712`](https://github.com/ebragas/recruitcrm-mcp/commit/ef6171258786aa51bbfd1931c85b17808dfb6019))
 
 ### Features
 
