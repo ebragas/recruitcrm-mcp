@@ -194,8 +194,15 @@ cython_debug/
 # Claude Code worktrees
 .claude/worktrees/
 
+# Claude Code per-developer skills and settings
+.claude/skills/
+.claude/settings.json
+
 # Claude Code project-scoped MCP config (per-developer, references local secrets)
 .mcp.json
+
+# Maintainer-only TODO scratchpad
+TODO.md
 
 # Ruff stuff:
 .ruff_cache/
