@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v0.19.0 (2026-05-01)
+
+### Features
+
+- **MAIN-806**: Default Sentry traces_sample_rate to 1.0
+  ([#40](https://github.com/ebragas/recruitcrm-mcp/pull/40),
+  [`46bd33e`](https://github.com/ebragas/recruitcrm-mcp/commit/46bd33ee2e506e0176475b2cdbdfe3154f3a1ec3))
+
+* feat(MAIN-806): default Sentry traces_sample_rate to 1.0
+
+Flips the empty/missing default for RECRUIT_CRM_MCP_SENTRY_TRACES_RATE from 0.0 to 1.0 so users with
+  a DSN configured get the Sentry MCP Dashboard populated (per-tool request count, error rate, p95
+  latency, client mix) without having to know about an extra env var. Without a DSN the MCP still
+  makes zero network calls — the bring-your-own-DSN posture is unchanged.
+
+Operators on tight Sentry quotas can dial sampling down via the env var or set 0.0 to disable
+  tracing while keeping error capture.
+
+* chore(MAIN-806): bump sentry-sdk[mcp] floor to 2.43.0
+
+MCPIntegration requires sentry-sdk>=2.43.0 per the docs. Without this floor, the integration import
+  succeeds but the MCP onboarding/verify step in Sentry won't recognize the events.
+
+* feat(MAIN-806): stamp spans with per-process id for session grouping
+
+The MCP stdio transport carries no native session ID, and FastMCP opens a fresh root trace for every
+  tools/call, so out of the box there's no way to group calls made within one Claude Desktop launch.
+
+Generate a UUID once per server boot and attach it as the recruit_crm_mcp.process_id tag on every
+  span. Dashboards can then answer 'which tools get used together in one session' and 'what's the
+  typical sequence' — useful for spotting tools that are always paired (e.g. a lookup before a
+  write) and could be merged.
+
+---------
+
+Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+
 ## v0.18.2 (2026-05-01)
 
 ### Bug Fixes
@@ -25,6 +63,11 @@ Implements MAIN-805.
 ---------
 
 Co-authored-by: Eric Bragas <eric@magicandco.agency>
+
+### Chores
+
+- **release**: 0.18.2
+  ([`d6c7196`](https://github.com/ebragas/recruitcrm-mcp/commit/d6c71963143dc6f874725392070e7ce10f8a9662))
 
 
 ## v0.18.1 (2026-05-01)
