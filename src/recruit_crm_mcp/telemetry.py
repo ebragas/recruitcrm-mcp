@@ -19,6 +19,7 @@ Env vars:
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import uuid
@@ -27,7 +28,38 @@ from typing import Any
 from recruit_crm_mcp import __version__
 from recruit_crm_mcp.client import RecruitCrmError
 
+try:
+    from builtins import BaseExceptionGroup  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python 3.10 fallback
+    from exceptiongroup import BaseExceptionGroup  # type: ignore[no-redef]
+
 logger = logging.getLogger(__name__)
+
+
+def _walk_exception_chain(exc: BaseException | None):
+    """Yield every exception reachable from ``exc`` via cause/context links
+    and ``BaseExceptionGroup.exceptions``.
+
+    The stdio shutdown EPIPE arrives wrapped in an anyio task-group
+    ``BaseExceptionGroup``, so a plain ``__cause__``/``__context__`` walk
+    would miss it. We do a depth-first traversal and dedupe by id().
+    """
+    if exc is None:
+        return
+    seen: set[int] = set()
+    stack: list[BaseException] = [exc]
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        if isinstance(current, BaseExceptionGroup):
+            stack.extend(current.exceptions)
+        if current.__cause__ is not None:
+            stack.append(current.__cause__)
+        if current.__context__ is not None:
+            stack.append(current.__context__)
 
 
 def _is_upstream_4xx(exc: BaseException | None) -> bool:
@@ -37,28 +69,48 @@ def _is_upstream_4xx(exc: BaseException | None) -> bool:
     behind __cause__ / __context__ links. Any 4xx anywhere in the chain
     means the event is rooted in a user-side error from the upstream API.
     """
-    seen: set[int] = set()
-    while exc is not None and id(exc) not in seen:
-        seen.add(id(exc))
-        if isinstance(exc, RecruitCrmError) and 400 <= exc.status < 500:
+    return any(
+        isinstance(e, RecruitCrmError) and 400 <= e.status < 500
+        for e in _walk_exception_chain(exc)
+    )
+
+
+def _is_broken_pipe(exc: BaseException | None) -> bool:
+    """Walk the exception chain looking for an EPIPE on the stdio transport.
+
+    Triggered on every Claude Desktop quit: the MCP client closes its end
+    of stdout while ``mcp/server/stdio.py`` is mid-flush, anyio surfaces
+    EPIPE wrapped in a ``BaseExceptionGroup`` from its task-group, and
+    Python's excepthook captures it. Process is exiting; nothing actionable.
+    """
+    for e in _walk_exception_chain(exc):
+        if isinstance(e, BrokenPipeError):
             return True
-        exc = exc.__cause__ or exc.__context__
+        if isinstance(e, OSError) and e.errno == errno.EPIPE:
+            return True
     return False
 
 
 def _before_send(
     event: dict[str, Any], hint: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Drop Sentry events caused by 4xx responses from the upstream API.
+    """Drop Sentry events that aren't real production bugs.
 
-    These are user-input errors (bad slugs, already-assigned candidates, etc.)
-    that the API surfaces correctly to the caller — they aren't production
-    bugs. 5xx, network errors, ValidationError, and unhandled exceptions
-    still capture normally.
+    Filters:
+    - 4xx responses from the upstream API: user-input errors (bad slugs,
+      already-assigned candidates, etc.) the API surfaces correctly to
+      the caller.
+    - ``BrokenPipeError`` from the stdio transport: benign client-disconnect
+      noise on every shutdown, not a server bug.
+
+    5xx, network errors, ValidationError, and unhandled exceptions still
+    capture normally.
     """
     exc_info = hint.get("exc_info")
-    if exc_info and _is_upstream_4xx(exc_info[1]):
-        return None
+    if exc_info:
+        exc = exc_info[1]
+        if _is_upstream_4xx(exc) or _is_broken_pipe(exc):
+            return None
     return event
 
 

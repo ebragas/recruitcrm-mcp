@@ -22,6 +22,11 @@ dependencies = [
     # markdownify ships bs4 transitively today, but declare it explicitly
     # so we don't break if that dep set ever changes.
     "beautifulsoup4>=4.12.0",
+    # BaseExceptionGroup is builtin on 3.11+; backport on 3.10. Used by
+    # telemetry._before_send to filter benign stdio-shutdown EPIPE wrapped
+    # by anyio's task group. Currently transitive via anyio — declared
+    # explicitly so the filter doesn't break if anyio drops the marker.
+    "exceptiongroup>=1.1.0; python_version < '3.11'",
 ]
 
 [project.urls]
