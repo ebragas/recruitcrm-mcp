@@ -1,5 +1,6 @@
 """Tests for the optional Sentry telemetry hook."""
 
+import errno
 import sys
 from unittest.mock import patch
 
@@ -7,6 +8,11 @@ import pytest
 
 from recruit_crm_mcp import telemetry
 from recruit_crm_mcp.client import RecruitCrmError
+
+try:
+    from builtins import BaseExceptionGroup  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python 3.10 fallback
+    from exceptiongroup import BaseExceptionGroup  # type: ignore[no-redef]
 
 
 def test_init_telemetry_no_op_without_dsn(monkeypatch):
@@ -214,6 +220,102 @@ def test_before_send_no_exc_info_keeps_event():
     """Non-exception events (e.g. messages) pass through unchanged."""
     event = {"message": "hello"}
     result = telemetry._before_send(event, {})
+    assert result is event
+
+
+def test_before_send_drops_bare_broken_pipe():
+    """Plain BrokenPipeError from stdio shutdown is benign noise."""
+    err = BrokenPipeError(errno.EPIPE, "Broken pipe")
+    result = telemetry._before_send({"event": "x"}, {"exc_info": _exc_info(err)})
+    assert result is None
+
+
+def test_before_send_drops_oserror_epipe():
+    """Some shutdown paths surface EPIPE as OSError, not BrokenPipeError."""
+    err = OSError(errno.EPIPE, "Broken pipe")
+    result = telemetry._before_send({"event": "x"}, {"exc_info": _exc_info(err)})
+    assert result is None
+
+
+def test_before_send_drops_broken_pipe_inside_exception_group():
+    """The real PYTHON-B stack: anyio's task group wraps EPIPE in a
+    BaseExceptionGroup before it bubbles out of mcp.run()."""
+    inner = BrokenPipeError(errno.EPIPE, "Broken pipe")
+    group = BaseExceptionGroup("unhandled errors in a TaskGroup", [inner])
+    result = telemetry._before_send({"event": "x"}, {"exc_info": _exc_info(group)})
+    assert result is None
+
+
+def test_before_send_drops_broken_pipe_via_cause_chain():
+    """Same shape as the wrapped-4xx test — confirm chain-walking applies."""
+    try:
+        try:
+            raise BrokenPipeError(errno.EPIPE, "Broken pipe")
+        except BrokenPipeError as e:
+            raise RuntimeError("transport closed") from e
+    except RuntimeError:
+        info = sys.exc_info()
+    result = telemetry._before_send({"event": "x"}, {"exc_info": info})
+    assert result is None
+
+
+def test_before_send_keeps_exception_with_suppressed_broken_pipe_context():
+    """``raise ... from None`` deliberately hides the prior context. The walker
+    must respect ``__suppress_context__`` — otherwise a real bug whose handler
+    happened to fire mid-EPIPE would be silently dropped."""
+    try:
+        try:
+            raise BrokenPipeError(errno.EPIPE, "Broken pipe")
+        except BrokenPipeError:
+            raise RuntimeError("real bug surfaced during shutdown") from None
+    except RuntimeError:
+        info = sys.exc_info()
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": info})
+    assert result is event
+
+
+def test_before_send_keeps_oserror_non_epipe():
+    """Other OSError errnos (ENOSPC, EIO, …) are real bugs — must capture."""
+    err = OSError(errno.ENOSPC, "No space left on device")
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(err)})
+    assert result is event
+
+
+def test_before_send_keeps_unrelated_exception_group():
+    """An ExceptionGroup that doesn't contain a BrokenPipeError must pass
+    through — e.g. a TaskGroup surfacing real bugs."""
+    group = BaseExceptionGroup("multi-failure", [RuntimeError("boom")])
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(group)})
+    assert result is event
+
+
+def test_before_send_keeps_mixed_group_with_broken_pipe_and_real_bug():
+    """A TaskGroup can surface a benign EPIPE alongside a genuine failure.
+    Dropping the whole event would silently swallow the real bug."""
+    group = BaseExceptionGroup(
+        "mixed",
+        [BrokenPipeError(errno.EPIPE, "Broken pipe"), RuntimeError("real bug")],
+    )
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(group)})
+    assert result is event
+
+
+def test_before_send_keeps_mixed_group_with_4xx_and_real_bug():
+    """Same guard for the 4xx side: a TaskGroup mixing a user-input 4xx with
+    a real exception must still capture."""
+    group = BaseExceptionGroup(
+        "mixed",
+        [
+            RecruitCrmError(404, "not found", "GET", "/x"),
+            RuntimeError("real bug"),
+        ],
+    )
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(group)})
     assert result is event
 
 

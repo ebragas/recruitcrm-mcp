@@ -19,6 +19,7 @@ Env vars:
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import uuid
@@ -27,37 +28,85 @@ from typing import Any
 from recruit_crm_mcp import __version__
 from recruit_crm_mcp.client import RecruitCrmError
 
+try:
+    from builtins import BaseExceptionGroup  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python 3.10 fallback
+    from exceptiongroup import BaseExceptionGroup  # type: ignore[no-redef]
+
 logger = logging.getLogger(__name__)
 
 
-def _is_upstream_4xx(exc: BaseException | None) -> bool:
-    """Walk the exception chain looking for a 4xx upstream API error.
-
-    FastMCP wraps tool exceptions, so the original RecruitCrmError may sit
-    behind __cause__ / __context__ links. Any 4xx anywhere in the chain
-    means the event is rooted in a user-side error from the upstream API.
+def _is_self_benign(exc: BaseException) -> bool:
+    """True if ``exc`` itself (ignoring its chain) is a known benign type:
+    a 4xx upstream API error or an EPIPE from the stdio transport.
     """
-    seen: set[int] = set()
-    while exc is not None and id(exc) not in seen:
-        seen.add(id(exc))
-        if isinstance(exc, RecruitCrmError) and 400 <= exc.status < 500:
-            return True
-        exc = exc.__cause__ or exc.__context__
+    if isinstance(exc, BrokenPipeError):
+        return True
+    if isinstance(exc, OSError) and exc.errno == errno.EPIPE:
+        return True
+    if isinstance(exc, RecruitCrmError) and 400 <= exc.status < 500:
+        return True
+    return False
+
+
+def _is_benign(
+    exc: BaseException | None, _seen: set[int] | None = None
+) -> bool:
+    """True iff every actionable failure reachable from ``exc`` is benign noise.
+
+    For a ``BaseExceptionGroup``, ALL child exceptions must be benign — anyio's
+    task group can wrap one EPIPE alongside a real bug, and dropping the event
+    in that case would silently swallow the real failure.
+
+    For a non-group exception, the exception itself is the failure; ``__cause__``
+    / ``__context__`` are historical context for the wrapping pattern
+    (``raise OuterError() from underlying``). If the outer exception is a known
+    benign type we drop; otherwise we follow the chain to the underlying cause.
+    Respects ``__suppress_context__`` (set by ``raise ... from None``).
+    """
+    if exc is None:
+        return False
+    if _seen is None:
+        _seen = set()
+    if id(exc) in _seen:
+        return False
+    _seen.add(id(exc))
+
+    if isinstance(exc, BaseExceptionGroup):
+        return bool(exc.exceptions) and all(
+            _is_benign(child, _seen) for child in exc.exceptions
+        )
+
+    if _is_self_benign(exc):
+        return True
+    if exc.__cause__ is not None:
+        return _is_benign(exc.__cause__, _seen)
+    if exc.__context__ is not None and not exc.__suppress_context__:
+        return _is_benign(exc.__context__, _seen)
     return False
 
 
 def _before_send(
     event: dict[str, Any], hint: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Drop Sentry events caused by 4xx responses from the upstream API.
+    """Drop Sentry events that aren't real production bugs.
 
-    These are user-input errors (bad slugs, already-assigned candidates, etc.)
-    that the API surfaces correctly to the caller — they aren't production
-    bugs. 5xx, network errors, ValidationError, and unhandled exceptions
-    still capture normally.
+    Filters (see ``_is_self_benign`` for the exact match list):
+    - 4xx responses from the upstream API: user-input errors (bad slugs,
+      already-assigned candidates, etc.) the API surfaces correctly to
+      the caller.
+    - ``BrokenPipeError`` (and ``OSError`` with ``errno == EPIPE``, which some
+      shutdown paths surface instead) from the stdio transport: benign
+      client-disconnect noise on every shutdown, not a server bug.
+
+    A mixed ``BaseExceptionGroup`` containing both a benign exception and a
+    real failure is kept — see ``_is_benign``.
+
+    5xx, network errors, ValidationError, and unhandled exceptions still
+    capture normally.
     """
     exc_info = hint.get("exc_info")
-    if exc_info and _is_upstream_4xx(exc_info[1]):
+    if exc_info and _is_benign(exc_info[1]):
         return None
     return event
 
