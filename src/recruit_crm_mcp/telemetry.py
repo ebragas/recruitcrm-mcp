@@ -100,8 +100,9 @@ def _before_send(
     - 4xx responses from the upstream API: user-input errors (bad slugs,
       already-assigned candidates, etc.) the API surfaces correctly to
       the caller.
-    - ``BrokenPipeError`` from the stdio transport: benign client-disconnect
-      noise on every shutdown, not a server bug.
+    - ``BrokenPipeError`` (and ``OSError`` with ``errno == EPIPE``, which some
+      shutdown paths surface instead) from the stdio transport: benign
+      client-disconnect noise on every shutdown, not a server bug.
 
     5xx, network errors, ValidationError, and unhandled exceptions still
     capture normally.
