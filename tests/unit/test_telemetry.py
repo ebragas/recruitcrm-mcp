@@ -292,6 +292,33 @@ def test_before_send_keeps_unrelated_exception_group():
     assert result is event
 
 
+def test_before_send_keeps_mixed_group_with_broken_pipe_and_real_bug():
+    """A TaskGroup can surface a benign EPIPE alongside a genuine failure.
+    Dropping the whole event would silently swallow the real bug."""
+    group = BaseExceptionGroup(
+        "mixed",
+        [BrokenPipeError(errno.EPIPE, "Broken pipe"), RuntimeError("real bug")],
+    )
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(group)})
+    assert result is event
+
+
+def test_before_send_keeps_mixed_group_with_4xx_and_real_bug():
+    """Same guard for the 4xx side: a TaskGroup mixing a user-input 4xx with
+    a real exception must still capture."""
+    group = BaseExceptionGroup(
+        "mixed",
+        [
+            RecruitCrmError(404, "not found", "GET", "/x"),
+            RuntimeError("real bug"),
+        ],
+    )
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": _exc_info(group)})
+    assert result is event
+
+
 def test_init_telemetry_stamps_process_id_tag(monkeypatch):
     """Every span emitted by one server lifetime should share a process_id
     tag so dashboards can group calls into "sessions" — stdio MCP has no
