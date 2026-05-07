@@ -259,6 +259,22 @@ def test_before_send_drops_broken_pipe_via_cause_chain():
     assert result is None
 
 
+def test_before_send_keeps_exception_with_suppressed_broken_pipe_context():
+    """``raise ... from None`` deliberately hides the prior context. The walker
+    must respect ``__suppress_context__`` — otherwise a real bug whose handler
+    happened to fire mid-EPIPE would be silently dropped."""
+    try:
+        try:
+            raise BrokenPipeError(errno.EPIPE, "Broken pipe")
+        except BrokenPipeError:
+            raise RuntimeError("real bug surfaced during shutdown") from None
+    except RuntimeError:
+        info = sys.exc_info()
+    event = {"event": "x"}
+    result = telemetry._before_send(event, {"exc_info": info})
+    assert result is event
+
+
 def test_before_send_keeps_oserror_non_epipe():
     """Other OSError errnos (ENOSPC, EIO, …) are real bugs — must capture."""
     err = OSError(errno.ENOSPC, "No space left on device")

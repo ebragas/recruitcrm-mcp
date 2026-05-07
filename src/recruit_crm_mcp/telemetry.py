@@ -58,7 +58,7 @@ def _walk_exception_chain(exc: BaseException | None):
             stack.extend(current.exceptions)
         if current.__cause__ is not None:
             stack.append(current.__cause__)
-        if current.__context__ is not None:
+        elif current.__context__ is not None and not current.__suppress_context__:
             stack.append(current.__context__)
 
 
