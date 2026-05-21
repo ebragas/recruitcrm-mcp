@@ -771,6 +771,64 @@ class TestLogMeetingTool:
 
         assert captured["payload"]["do_not_send_calendar_invites"] == "0"
 
+    @pytest.mark.anyio
+    async def test_accepts_stringified_json_list_args(self, monkeypatch):
+        """Coerce JSON-string array params at validation time.
+
+        Models occasionally stringify nullable-array args when calling tools,
+        emitting ``'["slug"]'`` instead of ``["slug"]`` (see MAIN-829). The
+        wrapper must accept both forms and produce an identical payload.
+        Verified through ``tool.run(...)`` since that's where pydantic
+        validation — and our ``BeforeValidator`` — actually fires.
+        """
+        from recruit_crm_mcp import server
+
+        captured: dict = {}
+
+        async def mock_create_meeting(payload):
+            captured["payload"] = payload
+            return {"id": 1}
+
+        monkeypatch.setattr(server.client, "create_meeting", mock_create_meeting)
+
+        tool = await server.mcp.get_tool("log_meeting")
+        await tool.run({
+            "title": "t",
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-01-01T01:00:00Z",
+            "related_to": {"id": "cand-1", "kind": "candidate"},
+            "attendee_contacts": '["con-1","con-2"]',
+            "attendee_candidates": '["cand-1"]',
+            "attendee_users": "[29998, 23453]",
+        })
+
+        payload = captured["payload"]
+        assert payload["attendee_contacts"] == "con-1,con-2"
+        assert payload["attendee_candidates"] == "cand-1"
+        assert payload["attendee_users"] == "29998,23453"
+
+    @pytest.mark.anyio
+    async def test_rejects_non_list_json_string(self, monkeypatch):
+        from pydantic import ValidationError
+
+        from recruit_crm_mcp import server
+
+        async def mock_create_meeting(payload):  # pragma: no cover - shouldn't fire
+            return {"id": 1}
+
+        monkeypatch.setattr(server.client, "create_meeting", mock_create_meeting)
+
+        tool = await server.mcp.get_tool("log_meeting")
+        with pytest.raises(ValidationError) as exc:
+            await tool.run({
+                "title": "t",
+                "start_date": "2025-01-01T00:00:00Z",
+                "end_date": "2025-01-01T01:00:00Z",
+                "related_to": {"id": "cand-1", "kind": "candidate"},
+                "attendee_candidates": "not json",
+            })
+        assert "invalid JSON" in str(exc.value)
+
 
 class TestCreateNoteTool:
     @pytest.mark.anyio
@@ -1463,6 +1521,33 @@ class TestUpdateMeetingTool:
 
         assert captured["meeting_id"] == 7
         assert captured["patch"] == {}
+
+    @pytest.mark.anyio
+    async def test_accepts_stringified_json_list_args(self, monkeypatch):
+        """Same MAIN-829 coercion path as ``log_meeting``, for ``update_meeting``."""
+        from recruit_crm_mcp import server
+
+        captured: dict = {}
+
+        async def mock_update_meeting(meeting_id, patch):
+            captured["meeting_id"] = meeting_id
+            captured["patch"] = patch
+            return {"id": meeting_id}
+
+        monkeypatch.setattr(server.client, "update_meeting", mock_update_meeting)
+
+        tool = await server.mcp.get_tool("update_meeting")
+        await tool.run({
+            "meeting_id": 42,
+            "attendee_contacts": '["con-1","con-2"]',
+            "attendee_candidates": '["cand-1"]',
+            "attendee_users": "[99, 100]",
+        })
+
+        patch = captured["patch"]
+        assert patch["attendee_contacts"] == "con-1,con-2"
+        assert patch["attendee_candidates"] == "cand-1"
+        assert patch["attendee_users"] == "99,100"
 
 
 class TestDeleteNoteTool:
