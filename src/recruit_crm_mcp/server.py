@@ -1,15 +1,17 @@
 """Recruit CRM MCP server."""
 
+import json
 import logging
 import os
 import platform
 import sys
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from pydantic import BeforeValidator
 
 from recruit_crm_mcp import __version__, client
 from recruit_crm_mcp.client import RecruitCrmError
@@ -97,6 +99,34 @@ def _build_payload(
     if custom_fields is not None:
         payload["custom_fields"] = [cf.model_dump() for cf in custom_fields]
     return payload
+
+
+def _coerce_json_list(data: Any) -> Any:
+    """Parse a JSON-encoded list string into a real list.
+
+    Models calling tools through Claude Desktop sometimes stringify array
+    arguments (emitting ``'["slug"]'`` instead of ``["slug"]``) for params
+    whose schema is a nullable array (`anyOf: [array, null]`). Coerce the
+    string to a list before downstream pydantic validation; leave anything
+    else untouched.
+    """
+    if isinstance(data, str):
+        try:
+            parsed = json.loads(data)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"expected a list or JSON-encoded list; got invalid JSON: {e}"
+            ) from e
+        if not isinstance(parsed, list):
+            raise ValueError(
+                f"expected a list or JSON-encoded list; got {type(parsed).__name__}"
+            )
+        return parsed
+    return data
+
+
+StrList = Annotated[list[str] | None, BeforeValidator(_coerce_json_list)]
+IntList = Annotated[list[int] | None, BeforeValidator(_coerce_json_list)]
 
 
 def _reraise_as_tool_error(exc: RecruitCrmError) -> None:
@@ -592,9 +622,9 @@ async def log_meeting(
     start_date: str,
     end_date: str,
     related_to: EntityRef,
-    attendee_contacts: list[str] | None = None,
-    attendee_candidates: list[str] | None = None,
-    attendee_users: list[int] | None = None,
+    attendee_contacts: StrList = None,
+    attendee_candidates: StrList = None,
+    attendee_users: IntList = None,
     description: str | None = None,
     address: str | None = None,
     meeting_type_id: int | None = None,
@@ -1231,9 +1261,9 @@ async def update_meeting(
     reminder: int | None = None,
     owner_id: int | None = None,
     related_to: EntityRef | None = None,
-    attendee_contacts: list[str] | None = None,
-    attendee_candidates: list[str] | None = None,
-    attendee_users: list[int] | None = None,
+    attendee_contacts: StrList = None,
+    attendee_candidates: StrList = None,
+    attendee_users: IntList = None,
     associated: Associations | None = None,
     do_not_send_calendar_invites: bool | None = None,
 ) -> WriteResult:
